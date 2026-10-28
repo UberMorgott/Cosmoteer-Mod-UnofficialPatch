@@ -34,6 +34,7 @@ internal static class Patcher
     [
         (Target, typeof(PortToggleMode)),
         (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
+        (MapNodeText.Target, typeof(MapNodeText)),
     ];
 
     /// <summary>True only when every patch is installed.</summary>
