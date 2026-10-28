@@ -4,7 +4,7 @@ Collected 2026-10-28 from Steam discussions (app 799600). Game 0.30.4. "read" = 
 Patch notes 0.30.3c/d and 0.30.4 not yet checked: exclude anything they already fixed.
 
 | # | Issue | Area | Evidence | Fix idea (unverified) |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 1 | Random hangs on Linux/Proton since last update; `--cores 1` works around it | perf | read, 52 replies, [thread](https://steamcommunity.com/app/799600/discussions/0/832745759814356553/) | threading race; find root cause |
 | 2 | Hang (sound loops, no input) in saves with ~10 owned ships | perf/save | read, 4 replies, [thread](https://steamcommunity.com/app/799600/discussions/4/805723552519125523/) | likely same as #1; profile with such a save |
 | 3 | Memory leak on quickload: each reload laggier until restart | perf | read, 2 replies, [thread](https://steamcommunity.com/app/799600/discussions/4/832745943312959862/) | stale game state kept after load; release it |
