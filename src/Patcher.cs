@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using Cosmoteer.Source.Ships.Blueprints;
 using HarmonyLib;
 
@@ -25,6 +28,13 @@ internal static class Patcher
         AccessTools.Method(typeof(BaseBlueprintPartNetworkPort), nameof(BaseBlueprintPartNetworkPort.UpdateOperational))
         ?? throw new MissingMethodException(nameof(BaseBlueprintPartNetworkPort), nameof(BaseBlueprintPartNetworkPort.UpdateOperational));
 
+    /// <summary>Each target and the class holding its public static Prefix / Postfix / Transpiler (any subset).</summary>
+    internal static (MethodBase Target, Type Patch)[] Patches =>
+    [
+        (Target, typeof(PortToggleMode)),
+        (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
+    ];
+
     /// <summary>True only when every patch is installed.</summary>
     public static bool Apply()
     {
@@ -32,16 +42,20 @@ internal static class Patcher
         var harmony = new Harmony(HarmonyId);
         try
         {
-            MethodInfo target = Target;
-            List<MethodBase> inliners = FindR2RInliners(target); // pure read, before anything is patched
-            harmony.Patch(target, transpiler: new HarmonyMethod(AccessTools.Method(typeof(PortToggleMode), nameof(PortToggleMode.Transpiler))));
+            var patches = Patches.Select(p => (p.Target, p.Patch, Inliners: FindR2RInliners(p.Target))).ToList(); // pure read, before anything is patched
             var rejit = new HarmonyMethod(AccessTools.Method(typeof(Patcher), nameof(Rejit)));
-            foreach (MethodBase inliner in inliners)
+            int inlinerCount = 0;
+            foreach ((MethodBase target, Type patch, List<MethodBase> inliners) in patches)
             {
-                harmony.Patch(inliner, transpiler: rejit);
-                Log.Info($"  R2R inliner patched: {inliner.DeclaringType?.FullName}.{inliner.Name}");
+                harmony.Patch(target, Hook(patch, "Prefix"), Hook(patch, "Postfix"), Hook(patch, "Transpiler"));
+                foreach (MethodBase inliner in inliners)
+                {
+                    harmony.Patch(inliner, transpiler: rejit);
+                    Log.Info($"  R2R inliner of {target.Name} patched: {inliner.DeclaringType?.FullName}.{inliner.Name}");
+                }
+                inlinerCount += inliners.Count;
             }
-            Log.Info($"Patched 1 method + {inliners.Count} R2R inliners in {sw.ElapsedMilliseconds} ms");
+            Log.Info($"Patched {patches.Count} methods + {inlinerCount} R2R inliners in {sw.ElapsedMilliseconds} ms");
             return true;
         }
         catch (Exception ex)
@@ -52,6 +66,9 @@ internal static class Patcher
             return false;
         }
     }
+
+    private static HarmonyMethod? Hook(Type patch, string name) =>
+        patch.GetMethod(name, BindingFlags.Public | BindingFlags.Static) is { } m ? new HarmonyMethod(m) : null;
 
     /// <summary>Undoes every patch of this mod; throws if any is still installed afterwards (game is then not vanilla).</summary>
     internal static void RollBack(Action unpatchAll)
@@ -73,6 +90,22 @@ internal static class Patcher
 
     /// <summary>Unchanged IL: patching alone recompiles the method without its stale inlined copy.</summary>
     public static IEnumerable<CodeInstruction> Rejit(IEnumerable<CodeInstruction> instructions) => instructions;
+
+    /// <summary>
+    /// Whole body must be exactly the vanilla IL the patch was written against (opcodes, operands, labels, exception blocks),
+    /// else throws so Patcher rolls back to vanilla. Compared by SHA-256 of Harmony's instruction listing.
+    /// </summary>
+    internal static List<CodeInstruction> RequireIl(IEnumerable<CodeInstruction> instructions, string sha256, string method)
+    {
+        List<CodeInstruction> code = instructions.ToList();
+        string listing = string.Join("\n", code);
+        string actual = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(listing)));
+        if (actual != sha256)
+        {
+            throw new InvalidOperationException($"{method} IL changed (sha256 {actual}):\n  " + listing.Replace("\n", "\n  "));
+        }
+        return code;
+    }
 
     /// <summary>Precompiled methods of Cosmoteer.dll containing an inlined copy of <paramref name="patched"/>. Throws if unsafe.</summary>
     internal static List<MethodBase> FindR2RInliners(MethodBase patched)

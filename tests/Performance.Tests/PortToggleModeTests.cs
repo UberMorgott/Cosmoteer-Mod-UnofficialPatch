@@ -10,6 +10,11 @@ using Xunit;
 
 // Same platform as the mod under test (the game is Windows-only).
 [assembly: System.Runtime.Versioning.SupportedOSPlatform("windows7.0")]
+// Typed access to internal game members, as in the mod (attribute type comes from the mod via InternalsVisibleTo).
+[assembly: IgnoresAccessChecksTo("Cosmoteer")]
+[assembly: IgnoresAccessChecksTo("HalflingCore")]
+// Tests patch the same game methods with Harmony; run them one at a time.
+[assembly: Xunit.v3.Parallelization(Mode = Xunit.Sdk.ParallelMode.None)]
 
 namespace Performance.Tests;
 
@@ -29,8 +34,7 @@ internal static class GameAssemblies
 
 public class PortToggleModeTests
 {
-    // By name, not nameof: its signature uses game types this project deliberately does not reference at compile time.
-    private static readonly MethodInfo Get = typeof(PortToggleMode).GetMethod("Get")!;
+    private static readonly MethodInfo Get = typeof(PortToggleMode).GetMethod(nameof(PortToggleMode.Get))!;
 
     [Fact]
     public void TranspilerMatchesRealGameIl()
@@ -59,8 +63,11 @@ public class PortToggleModeTests
         {
             Log.Init(); // Performance.log next to the test DLL lists the patched R2R inliners
             Assert.True(Patcher.Apply());
-            Assert.Single(Harmony.GetPatchInfo(Patcher.Target)!.Transpilers);
-            Assert.All(Patcher.FindR2RInliners(Patcher.Target), m => Assert.Single(Harmony.GetPatchInfo(m)!.Transpilers));
+            foreach ((MethodBase target, _) in Patcher.Patches)
+            {
+                Assert.True(Harmony.GetPatchInfo(target)!.Owners.Contains(Patcher.HarmonyId), target.Name);
+                Assert.All(Patcher.FindR2RInliners(target), m => Assert.Single(Harmony.GetPatchInfo(m)!.Transpilers));
+            }
         }
         finally
         {

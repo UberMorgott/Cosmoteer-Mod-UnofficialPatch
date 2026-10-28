@@ -15,6 +15,15 @@
     <Reference Include="0Harmony">
       <HintPath>$(ModLoaderDir)\0Harmony.dll</HintPath>
     </Reference>
+    <!-- Compile-time only (publicized lib\ copies, see Performance.csproj); the real game DLLs load from GameBin. -->
+    <Reference Include="Cosmoteer">
+      <HintPath>..\..\lib\Cosmoteer.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="HalflingCore">
+      <HintPath>..\..\lib\HalflingCore.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
