@@ -33,7 +33,9 @@ public class AllocRegressionTests
         var run = dm.CreateDelegate<Func<object, object>>();
         object owner = RuntimeHelpers.GetUninitializedObject(target.DeclaringType!.Assembly.GetType(ownerType, throwOnError: true)!);
 
-        Assert.Equal(0, AllocatedIn100KCalls(() => run(owner)));
+        // Any per-call allocation is >= 24 B a call; below 1 B a call only one-time runtime work fits (a tier-1 promotion
+        // landing mid-loop allocates 96 B once, depending on test order; none with DOTNET_TieredCompilation=0).
+        Assert.InRange(AllocatedIn(Calls, () => run(owner)), 0, Calls - 1);
     }
 
     /// <summary>No transpiler adds an allocating instruction (newobj, newarr, box, method/field ldtoken) to a vanilla body.</summary>
@@ -63,11 +65,13 @@ public class AllocRegressionTests
         .GroupBy(c => $"{c.opcode} {(c.operand is ConstructorInfo ctor ? ctor.DeclaringType : c.operand)}")
         .ToDictionary(g => g.Key, g => g.Count());
 
-    private static long AllocatedIn100KCalls(Action call)
+    private const int Calls = 100_000;
+
+    private static long AllocatedIn(int calls, Action call)
     {
         call(); // JIT and cache fill
         long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 100_000; i++)
+        for (int i = 0; i < calls; i++)
         {
             call();
         }
