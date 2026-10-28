@@ -6,6 +6,8 @@ Mark entries not yet released as (unreleased).
 
 ## Multiplayer: desyncs
 
+- Station delivery missions could go out of sync in multiplayer: when two ships traded with the same station at the same moment, the game updated the station's offered delivery mission progress from two threads at once, so an update could be lost or applied in a different order on some clients. These updates are now queued and applied right after the parallel ship update, in the game's fixed ship order. All players need this mod. (unreleased)
+
 - Player money could go out of sync in multiplayer: when two ships of the same player traded with stations (or got pre-purchased resources refunded) at the same moment, the game updated the balance from two threads at once and one change could be lost on some clients. Money changes made during the parallel ship update are now collected safely and applied once, in a fixed order, right after it. All players need this mod. (unreleased)
 
 ## Performance: stutter and FPS spikes
