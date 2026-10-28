@@ -33,9 +33,9 @@ public class AllocRegressionTests
         var run = dm.CreateDelegate<Func<object, object>>();
         object owner = RuntimeHelpers.GetUninitializedObject(target.DeclaringType!.Assembly.GetType(ownerType, throwOnError: true)!);
 
-        // Any per-call allocation is >= 24 B a call; below 1 B a call only one-time runtime work fits (a tier-1 promotion
-        // landing mid-loop allocates 96 B once, depending on test order; none with DOTNET_TieredCompilation=0).
-        Assert.InRange(AllocatedIn(Calls, () => run(owner)), 0, Calls - 1);
+        // Absolute budget, independent of Calls: a fixed runtime overhead of 96 B was observed in some test orders
+        // (gone with DOTNET_TieredCompilation=0); any per-call allocation (>= 24 B a call) far exceeds it.
+        Assert.InRange(AllocatedIn(Calls, () => run(owner)), 0, 256);
     }
 
     /// <summary>No transpiler adds an allocating instruction (newobj, newarr, box, method/field ldtoken) to a vanilla body.</summary>
