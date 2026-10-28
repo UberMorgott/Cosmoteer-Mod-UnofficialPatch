@@ -6,7 +6,6 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Security.Cryptography;
 using System.Text;
-using Cosmoteer.Source.Ships.Blueprints;
 using HarmonyLib;
 
 namespace Performance;
@@ -25,14 +24,10 @@ internal static class Patcher
 {
     public const string HarmonyId = "morgott.performance";
 
-    internal static MethodInfo Target =>
-        AccessTools.Method(typeof(BaseBlueprintPartNetworkPort), nameof(BaseBlueprintPartNetworkPort.UpdateOperational))
-        ?? throw new MissingMethodException(nameof(BaseBlueprintPartNetworkPort), nameof(BaseBlueprintPartNetworkPort.UpdateOperational));
-
     /// <summary>Each target and the class holding its public static Prefix / Postfix / Transpiler (any subset).</summary>
     internal static (MethodBase Target, Type Patch)[] Patches =>
     [
-        (Target, typeof(PortToggleMode)),
+        .. PortToggleMode.Targets.Select(t => ((MethodBase)t.Target, typeof(PortToggleMode))),
         (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
         (MapNodeText.Target, typeof(MapNodeText)),
     ];

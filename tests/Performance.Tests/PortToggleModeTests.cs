@@ -34,26 +34,31 @@ internal static class GameAssemblies
 
 public class PortToggleModeTests
 {
-    private static readonly MethodInfo Get = typeof(PortToggleMode).GetMethod(nameof(PortToggleMode.Get))!;
+    public static TheoryData<int> TargetIndices => new(Enumerable.Range(0, PortToggleMode.Targets.Length));
 
-    [Fact]
-    public void TranspilerMatchesRealGameIl()
+    private static MethodInfo Target(int i) => PortToggleMode.Targets[i].Target;
+
+    [Theory]
+    [MemberData(nameof(TargetIndices))]
+    public void TranspilerMatchesRealGameIl(int index)
     {
-        var original = PatchProcessor.GetOriginalInstructions(Patcher.Target);
-        var patched = PortToggleMode.Transpiler(original).ToList();
+        var original = PatchProcessor.GetOriginalInstructions(Target(index));
+        var patched = PortToggleMode.Transpiler(original, Target(index)).ToList();
 
-        Assert.Equal(original.Count - 1, patched.Count);
+        Assert.Equal(original.Count, patched.Count);
         Assert.DoesNotContain(patched, i => i.opcode == OpCodes.Ldftn || i.opcode == OpCodes.Newobj);
-        Assert.Single(patched, i => i.opcode == OpCodes.Call && Equals(i.operand, Get));
+        Assert.Single(patched, i => i.opcode == OpCodes.Ldtoken && i.operand is MethodInfo { Name: "GetToggleMode" } m && m.DeclaringType == Target(index).DeclaringType);
+        Assert.Single(patched, i => i.opcode == OpCodes.Call && i.operand is MethodInfo { Name: nameof(PortToggleMode.Get) } m && m.DeclaringType == typeof(PortToggleMode));
     }
 
-    [Fact]
-    public void TranspilerRejectsChangedIl()
+    [Theory]
+    [MemberData(nameof(TargetIndices))]
+    public void TranspilerRejectsChangedIl(int index)
     {
-        var original = PatchProcessor.GetOriginalInstructions(Patcher.Target);
+        var original = PatchProcessor.GetOriginalInstructions(Target(index));
         original.Insert(0, new CodeInstruction(OpCodes.Nop));
 
-        Assert.Throws<InvalidOperationException>(() => PortToggleMode.Transpiler(original).ToList());
+        Assert.Throws<InvalidOperationException>(() => PortToggleMode.Transpiler(original, Target(index)).ToList());
     }
 
     [Fact]
@@ -82,7 +87,7 @@ public class PortToggleModeTests
         var rejit = new HarmonyMethod(typeof(Patcher).GetMethod(nameof(Patcher.Rejit)));
         try
         {
-            harmony.Patch(Patcher.Target, transpiler: rejit);
+            harmony.Patch(Target(0), transpiler: rejit);
             Assert.Throws<InvalidOperationException>(() => Patcher.RollBack(() => throw new InvalidOperationException("injected")));
             Assert.True(Harmony.HasAnyPatches(Patcher.HarmonyId));
 
@@ -95,21 +100,26 @@ public class PortToggleModeTests
         }
     }
 
-    [Fact]
-    public void CacheBindsOneDelegatePerPort()
+    /// <summary>Concrete owner of each target (the network port target is declared on an abstract base).</summary>
+    [Theory]
+    [InlineData(0, "Cosmoteer.Source.Ships.Blueprints.BlueprintPartNetworkPort")]
+    [InlineData(1, "Cosmoteer.Ships.Blueprints.Logic.Values.BlueprintPartStatProvider")]
+    [InlineData(2, "Cosmoteer.Ships.Blueprints.Logic.BlueprintPartNetworkToggle")]
+    public void CacheBindsOneDelegatePerOwner(int index, string ownerType)
     {
-        Type port = Patcher.Target.DeclaringType!.Assembly.GetType("Cosmoteer.Source.Ships.Blueprints.BlueprintPartNetworkPort", throwOnError: true)!;
-        object a = RuntimeHelpers.GetUninitializedObject(port);
-        object b = RuntimeHelpers.GetUninitializedObject(port);
+        Type owner = Target(index).DeclaringType!.Assembly.GetType(ownerType, throwOnError: true)!;
+        RuntimeMethodHandle getToggleMode = AccessTools.Method(Target(index).DeclaringType, "GetToggleMode").MethodHandle;
+        object a = RuntimeHelpers.GetUninitializedObject(owner);
+        object b = RuntimeHelpers.GetUninitializedObject(owner);
 
-        var a1 = (Delegate)Get.Invoke(null, new[] { a })!;
-        var a2 = (Delegate)Get.Invoke(null, new[] { a })!;
-        var b1 = (Delegate)Get.Invoke(null, new[] { b })!;
+        var a1 = PortToggleMode.Get(a, getToggleMode);
+        var a2 = PortToggleMode.Get(a, getToggleMode);
+        var b1 = PortToggleMode.Get(b, getToggleMode);
 
         Assert.Same(a1, a2);
         Assert.NotSame(a1, b1);
         Assert.Same(a, a1.Target);
         Assert.Same(b, b1.Target);
-        Assert.Equal("GetToggleMode", a1.Method.Name);
+        Assert.Equal(AccessTools.Method(Target(index).DeclaringType, "GetToggleMode"), a1.Method);
     }
 }
