@@ -19,7 +19,8 @@ namespace Performance;
 /// table (<see cref="R2RInlineInfo"/>) and re-patched with <see cref="Rejit"/>, which rebuilds them from IL so they call
 /// the patched method. Shared generic code is never patched; if the table lists a generic inliner, loading is refused.
 ///
-/// The patches change no sim result (same calls, same values), so a mixed lobby with and without the mod stays in sync.
+/// Performance patches change no sim result (same calls, same values). Desync fixes (<see cref="PlayerMoney"/>) do, so
+/// every MP player must run the same mod version.
 /// </summary>
 internal static class Patcher
 {
@@ -33,6 +34,8 @@ internal static class Patcher
         (MapNodeText.Target, typeof(MapNodeText)),
         (MusicSeek.Target, typeof(MusicSeek)),
         (MiniviewParticleBoxing.Target, typeof(MiniviewParticleBoxing)),
+        (PlayerMoney.Target, typeof(PlayerMoney)),
+        (PlayerMoneyFlush.Target, typeof(PlayerMoneyFlush)),
     ];
 
     /// <summary>True only when every patch is installed.</summary>
