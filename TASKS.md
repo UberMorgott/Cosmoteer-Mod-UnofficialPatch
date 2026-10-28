@@ -1,5 +1,10 @@
 # Performance mod: open tasks
 
+Scope (user, 2026-10-28): this is the single "unofficial patch" mod: every fixable game problem goes here
+(FPS, GC spikes, freezes, netcode/input delay, GC runtimeconfig). No separate Netcode mod. All MP players have identical mods.
+Planned: write System.GC.Server to runtimeconfig (if bench A/B wins) + a self-removing startup hook in the game folder that
+reverts the runtimeconfig change and deletes itself when this mod is uninstalled/disabled.
+
 Baseline (MP, fog off, 144 cap, 20 s trace 2026-10-28): 36 GCs (8-39 ms pauses, ~620 ms), 1.8 GB alloc (~90 MB/s).
 Top allocators: GetToggleMode delegate 429 MB (patched), DeWintersTC.Shields closures 243 MB, galaxy map labels 201 MB,
 NVorbis 154 MB, ThrusterManager dict 138 MB.
