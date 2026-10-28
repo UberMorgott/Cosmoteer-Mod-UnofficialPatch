@@ -4,6 +4,10 @@ Player-facing list of every fix and change, used for the Workshop page and chang
 One line per fix: what was wrong → what the mod does. Newest first inside each section.
 Mark entries not yet released as (unreleased).
 
+## Multiplayer: freezes
+
+- The whole multiplayer game froze for a moment whenever one player's inputs arrived late. The host chose the input delay from the two best connections' average ping, so a far or jittery player got too little delay. The delay now covers the two slowest connections' worst recent ping, rises at once when the network gets worse and comes back down one step at a time after 5 calm seconds. The mod log also gets a 10-second network summary (freezes, how early inputs arrived, ping per player). All players need this mod. (unreleased)
+
 ## Multiplayer: desyncs
 
 - Crew working a job of another ship (moving resources between your own ships, helping build another ship) could change that job from two threads at once in multiplayer, so its progress or crew list could differ between clients. When such a crew arrives or gives up on a path while on its own ship, the step is now queued and applied right after the parallel ship update, the same way the game already handles crew on other ships. All players need this mod. (unreleased)

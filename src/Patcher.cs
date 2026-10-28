@@ -38,6 +38,10 @@ internal static class Patcher
         (PlayerMoneyFlush.Target, typeof(PlayerMoneyFlush)),
         .. MissionTrade.Targets.Select(t => ((MethodBase)t.Target, typeof(MissionTrade))),
         (ForeignJobArrival.Target, typeof(ForeignJobArrival)),
+        (InputDelay.Target, typeof(InputDelay)),
+        (InputDelaySamples.Target, typeof(InputDelaySamples)),
+        (InputArrivalTelemetry.Target, typeof(InputArrivalTelemetry)),
+        (StallTelemetry.Target, typeof(StallTelemetry)),
     ];
 
     /// <summary>True only when every patch is installed.</summary>
