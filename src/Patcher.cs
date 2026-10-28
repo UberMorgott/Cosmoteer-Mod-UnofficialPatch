@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -31,6 +32,7 @@ internal static class Patcher
         (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
         (MapNodeText.Target, typeof(MapNodeText)),
         (MusicSeek.Target, typeof(MusicSeek)),
+        (MiniviewParticleBoxing.Target, typeof(MiniviewParticleBoxing)),
     ];
 
     /// <summary>True only when every patch is installed.</summary>
@@ -99,7 +101,19 @@ internal static class Patcher
         List<CodeInstruction> code = instructions.ToList();
         var ids = new Dictionary<Label, int>();
         string Id(Label l) => "L" + (ids.TryGetValue(l, out int n) ? n : ids[l] = ids.Count);
-        string listing = string.Join("\n", code.Select(ci =>
+        // Operands such as ldc.r4 3.4E+38 format by the current culture (the game does not fix it); hash must not.
+        CultureInfo culture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        string listing;
+        try
+        {
+            listing = Listing();
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = culture;
+        }
+        string Listing() => string.Join("\n", code.Select(ci =>
             string.Join(",", ci.labels.Select(Id)) + ": "
             + new CodeInstruction(ci.opcode, ci.operand switch
             {
