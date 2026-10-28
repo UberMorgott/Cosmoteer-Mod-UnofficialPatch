@@ -1,9 +1,9 @@
 ID = "morgott.performance"
-Name = "Performance"
+Name = "Unofficial Patch"
 Version = "0.1.0"
 Author = "Morgott"
 CompatibleGameVersions = ["0.30.5"]
-Description = "Fewer garbage-collection stutters: removes a per-frame memory allocation that every ship's network ports make in vanilla. Also fixes vanilla multiplayer desyncs, so every player in a multiplayer game must run the same version. If a game update changes the patched code, the mod switches itself off and the game runs vanilla. Requires Yet Another Mod Loader."
+Description = "Community unofficial patch for vanilla bugs. Fewer garbage-collection stutters: removes per-frame memory allocations from ship parts, muted music layers, particles, thrusters and the galaxy map. Also fixes vanilla multiplayer desyncs (money, station missions, crew on another ship's job), so every player in a multiplayer game must run the same version. If a game update changes the patched code, the mod switches itself off and the game runs vanilla. Requires Yet Another Mod Loader."
 Dependencies = ["3577650065"]
 ModifiesGameplay = true
 StringsFolder = "strings"
