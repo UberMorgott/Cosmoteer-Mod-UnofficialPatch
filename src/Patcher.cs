@@ -47,17 +47,27 @@ internal static class Patcher
         catch (Exception ex)
         {
             Log.Error("patch", ex);
-            try
-            {
-                harmony.UnpatchAll(HarmonyId);
-            }
-            catch (Exception unpatchEx)
-            {
-                // Not fatal: every patch keeps vanilla sim behavior, so a partial state cannot desync.
-                Log.Error("unpatch", unpatchEx);
-            }
+            RollBack(() => harmony.UnpatchAll(HarmonyId));
             Log.Info("Performance DISABLED: patches rolled back, game runs vanilla.");
             return false;
+        }
+    }
+
+    /// <summary>Undoes every patch of this mod; throws if any is still installed afterwards (game is then not vanilla).</summary>
+    internal static void RollBack(Action unpatchAll)
+    {
+        try
+        {
+            unpatchAll();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("unpatch", ex);
+        }
+        if (Harmony.HasAnyPatches(HarmonyId))
+        {
+            Log.Info("Performance ERROR: rollback incomplete, some patches remain; game is NOT vanilla. Remove or update the mod.");
+            throw new InvalidOperationException("patches of " + HarmonyId + " still present after UnpatchAll");
         }
     }
 

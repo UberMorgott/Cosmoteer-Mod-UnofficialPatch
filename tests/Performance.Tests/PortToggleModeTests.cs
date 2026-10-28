@@ -69,6 +69,26 @@ public class PortToggleModeTests
     }
 
     [Fact]
+    public void RollBackConfirmsVanillaOrThrowsOnResidue()
+    {
+        var harmony = new Harmony(Patcher.HarmonyId);
+        var rejit = new HarmonyMethod(typeof(Patcher).GetMethod(nameof(Patcher.Rejit)));
+        try
+        {
+            harmony.Patch(Patcher.Target, transpiler: rejit);
+            Assert.Throws<InvalidOperationException>(() => Patcher.RollBack(() => throw new InvalidOperationException("injected")));
+            Assert.True(Harmony.HasAnyPatches(Patcher.HarmonyId));
+
+            Patcher.RollBack(() => harmony.UnpatchAll(Patcher.HarmonyId));
+            Assert.False(Harmony.HasAnyPatches(Patcher.HarmonyId));
+        }
+        finally
+        {
+            harmony.UnpatchAll(Patcher.HarmonyId);
+        }
+    }
+
+    [Fact]
     public void CacheBindsOneDelegatePerPort()
     {
         Type port = Patcher.Target.DeclaringType!.Assembly.GetType("Cosmoteer.Source.Ships.Blueprints.BlueprintPartNetworkPort", throwOnError: true)!;
