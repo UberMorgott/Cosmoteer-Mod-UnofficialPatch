@@ -17,7 +17,7 @@ namespace Performance;
 /// </summary>
 internal static class ThrusterAccelerationCache
 {
-    private const string IlSha256 = "D64E121EF2E4C9FB1EFA4D65E57B20E69AF89833D718CE9D1B5ACE803D5CA0F1";
+    private const string IlSha256 = "C8089C82858836D3E4672F4E6E66B5C911A1A47115ED50EA505FE2E9C3F6F491";
 
     internal static MethodInfo Target =>
         AccessTools.Method(typeof(ThrusterManager), nameof(ThrusterManager.CalculateMaximumAccelerationAndRampTimeCached))

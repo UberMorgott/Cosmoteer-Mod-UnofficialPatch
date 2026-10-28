@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Security.Cryptography;
 using System.Text;
 using Cosmoteer.Source.Ships.Blueprints;
@@ -93,12 +94,23 @@ internal static class Patcher
 
     /// <summary>
     /// Whole body must be exactly the vanilla IL the patch was written against (opcodes, operands, labels, exception blocks),
-    /// else throws so Patcher rolls back to vanilla. Compared by SHA-256 of Harmony's instruction listing.
+    /// else throws so Patcher rolls back to vanilla. Compared by SHA-256 of Harmony's instruction listing, with labels
+    /// renumbered by first use (Harmony's label ids depend on what else is patched into the same method).
     /// </summary>
     internal static List<CodeInstruction> RequireIl(IEnumerable<CodeInstruction> instructions, string sha256, string method)
     {
         List<CodeInstruction> code = instructions.ToList();
-        string listing = string.Join("\n", code);
+        var ids = new Dictionary<Label, int>();
+        string Id(Label l) => "L" + (ids.TryGetValue(l, out int n) ? n : ids[l] = ids.Count);
+        string listing = string.Join("\n", code.Select(ci =>
+            string.Join(",", ci.labels.Select(Id)) + ": "
+            + new CodeInstruction(ci.opcode, ci.operand switch
+            {
+                Label l => Id(l),
+                Label[] ls => string.Join(",", ls.Select(Id)),
+                _ => ci.operand,
+            })
+            + " " + string.Join(",", ci.blocks.Select(b => b.blockType))));
         string actual = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(listing)));
         if (actual != sha256)
         {
