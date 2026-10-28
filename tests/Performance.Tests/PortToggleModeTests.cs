@@ -47,7 +47,10 @@ public class PortToggleModeTests
 
         Assert.Equal(original.Count, patched.Count);
         Assert.DoesNotContain(patched, i => i.opcode == OpCodes.Ldftn || i.opcode == OpCodes.Newobj);
-        Assert.Single(patched, i => i.opcode == OpCodes.Ldtoken && i.operand is MethodInfo { Name: "GetToggleMode" } m && m.DeclaringType == Target(index).DeclaringType);
+        Assert.DoesNotContain(patched, i => i.opcode == OpCodes.Ldtoken);
+        Assert.Single(patched, i => i.opcode == OpCodes.Ldc_I4 && i.operand is int site && site == index);
+        Assert.Equal("GetToggleMode", PortToggleMode.ToggleModes[index].Name);
+        Assert.Equal(Target(index).DeclaringType, PortToggleMode.ToggleModes[index].DeclaringType);
         Assert.Single(patched, i => i.opcode == OpCodes.Call && i.operand is MethodInfo { Name: nameof(PortToggleMode.Get) } m && m.DeclaringType == typeof(PortToggleMode));
     }
 
@@ -108,13 +111,12 @@ public class PortToggleModeTests
     public void CacheBindsOneDelegatePerOwner(int index, string ownerType)
     {
         Type owner = Target(index).DeclaringType!.Assembly.GetType(ownerType, throwOnError: true)!;
-        RuntimeMethodHandle getToggleMode = AccessTools.Method(Target(index).DeclaringType, "GetToggleMode").MethodHandle;
         object a = RuntimeHelpers.GetUninitializedObject(owner);
         object b = RuntimeHelpers.GetUninitializedObject(owner);
 
-        var a1 = PortToggleMode.Get(a, getToggleMode);
-        var a2 = PortToggleMode.Get(a, getToggleMode);
-        var b1 = PortToggleMode.Get(b, getToggleMode);
+        var a1 = PortToggleMode.Get(a, index);
+        var a2 = PortToggleMode.Get(a, index);
+        var b1 = PortToggleMode.Get(b, index);
 
         Assert.Same(a1, a2);
         Assert.NotSame(a1, b1);

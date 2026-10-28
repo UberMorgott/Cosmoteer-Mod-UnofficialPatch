@@ -34,27 +34,39 @@ internal static class PortToggleMode
         (Method(typeof(BlueprintPartNetworkToggle), nameof(BlueprintPartNetworkToggle.UpdateToggleFromRules)), "93187D8079492BF5D1FD9AF11E0157A93DBEB5698386F92C15F99B586D316425"),
     ];
 
+    /// <summary>GetToggleMode bound at each site, indexed like <see cref="Targets"/>.</summary>
+    internal static readonly MethodInfo[] ToggleModes = Targets.Select(t => Method(t.Target.DeclaringType!, "GetToggleMode")).ToArray();
+
     private static MethodInfo Method(Type type, string name) =>
         AccessTools.Method(type, name) ?? throw new MissingMethodException(type.Name, name);
 
-    /// <summary>Takes the stack of the replaced <c>newobj Func(object, IntPtr)</c>, with the method's token for its pointer.</summary>
-    public static Func<ID<PartToggleGuiRules>, int?> Get(object owner, RuntimeMethodHandle getToggleMode)
+    /// <summary>Takes the stack of the replaced <c>newobj Func(object, IntPtr)</c>, with the site index for its pointer.</summary>
+    public static Func<ID<PartToggleGuiRules>, int?> Get(object owner, int site)
     {
         if (!Cache.TryGetValue(owner, out Func<ID<PartToggleGuiRules>, int?>? f))
         {
-            f = ((MethodInfo)MethodBase.GetMethodFromHandle(getToggleMode)!).CreateDelegate<Func<ID<PartToggleGuiRules>, int?>>(owner);
+            f = ToggleModes[site].CreateDelegate<Func<ID<PartToggleGuiRules>, int?>>(owner);
             Cache.AddOrUpdate(owner, f);
         }
         return f;
     }
 
-    /// <summary>Whole vanilla body must match exactly (else throw: Patcher rolls back to vanilla); then ldftn+newobj -> ldtoken+call Get.</summary>
+    /// <summary>
+    /// Whole vanilla body must match exactly (else throw: Patcher rolls back to vanilla); then ldftn+newobj -> ldc.i4 site+call Get.
+    /// Not ldtoken: in a Harmony replacement each ldtoken of a method allocates a RuntimeMethodInfoStub (96 B, more than the Func).
+    /// </summary>
     public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
     {
-        (MethodInfo target, string sha) = Targets.Single(t => t.Target.MetadataToken == original.MetadataToken && t.Target.Module == original.Module);
+        int site = Array.FindIndex(Targets, t => t.Target.MetadataToken == original.MetadataToken && t.Target.Module == original.Module);
+        (MethodInfo target, string sha) = Targets[site];
         List<CodeInstruction> code = Patcher.RequireIl(instructions, sha, $"{target.DeclaringType!.Name}.{target.Name}");
         int i = code.FindIndex(c => c.opcode == OpCodes.Ldftn);
-        code[i].opcode = OpCodes.Ldtoken;
+        if (code[i].operand is not MethodInfo m || m.MetadataToken != ToggleModes[site].MetadataToken)
+        {
+            throw new InvalidOperationException($"{target.DeclaringType.Name}.{target.Name}: ldftn does not bind GetToggleMode");
+        }
+        code[i].opcode = OpCodes.Ldc_I4;
+        code[i].operand = site;
         code[i + 1].opcode = OpCodes.Call;
         code[i + 1].operand = AccessTools.Method(typeof(PortToggleMode), nameof(Get));
         return code;
