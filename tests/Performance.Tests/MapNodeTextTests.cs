@@ -40,6 +40,22 @@ public class MapNodeTextTests
     }
 
     [Fact]
+    public void HooksWrapVanillaInnermost()
+    {
+        try
+        {
+            Assert.True(Patcher.Apply());
+            Patches info = Harmony.GetPatchInfo(MapNodeText.Target)!;
+            Assert.Equal(Priority.Last, Assert.Single(info.Prefixes).priority);
+            Assert.Equal(Priority.First, Assert.Single(info.Postfixes).priority);
+        }
+        finally
+        {
+            new Harmony(Patcher.HarmonyId).UnpatchAll(Patcher.HarmonyId);
+        }
+    }
+
+    [Fact]
     public void HitOnlyForSameNodeAndKey()
     {
         MapNode node = NewNode();

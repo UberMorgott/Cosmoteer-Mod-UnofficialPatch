@@ -45,6 +45,8 @@ internal static class MapNodeText
         Patcher.RequireIl(instructions, IlSha256, "CareerGameModeManager.GetMapNodeText");
 
     /// <summary>Hit: append the cached text and skip vanilla. Miss: run vanilla, remembering where its text starts.</summary>
+    /// <remarks>Last prefix and first postfix, so the cached span holds vanilla's text only, never other mods' hooks.</remarks>
+    [HarmonyPriority(Priority.Last)]
     public static bool Prefix(CareerGameModeManager __instance, MapNode node, StringBuilder sb, out (Key Key, int Start) __state)
     {
         CareerGameModeManager.MapNodeData data = __instance.GetMapNodeData(node);
@@ -59,6 +61,7 @@ internal static class MapNodeText
         return true;
     }
 
+    [HarmonyPriority(Priority.First)]
     public static void Postfix(MapNode node, StringBuilder sb, (Key Key, int Start) __state, bool __runOriginal)
     {
         if (__runOriginal && __state.Start >= 0) // vanilla text only, never another mod's replacement
