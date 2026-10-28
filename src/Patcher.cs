@@ -19,7 +19,7 @@ namespace Performance;
 /// table (<see cref="R2RInlineInfo"/>) and re-patched with <see cref="Rejit"/>, which rebuilds them from IL so they call
 /// the patched method. Shared generic code is never patched; if the table lists a generic inliner, loading is refused.
 ///
-/// Performance patches change no sim result (same calls, same values). Desync fixes (<see cref="PlayerMoney"/>, <see cref="MissionTrade"/>) do, so
+/// Performance patches change no sim result (same calls, same values). Desync fixes (<see cref="PlayerMoney"/>, <see cref="MissionTrade"/>, <see cref="ForeignJobArrival"/>) do, so
 /// every MP player must run the same mod version.
 /// </summary>
 internal static class Patcher
@@ -37,6 +37,7 @@ internal static class Patcher
         (PlayerMoney.Target, typeof(PlayerMoney)),
         (PlayerMoneyFlush.Target, typeof(PlayerMoneyFlush)),
         .. MissionTrade.Targets.Select(t => ((MethodBase)t.Target, typeof(MissionTrade))),
+        (ForeignJobArrival.Target, typeof(ForeignJobArrival)),
     ];
 
     /// <summary>True only when every patch is installed.</summary>
