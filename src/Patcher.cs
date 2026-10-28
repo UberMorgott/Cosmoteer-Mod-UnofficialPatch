@@ -30,6 +30,7 @@ internal static class Patcher
         .. PortToggleMode.Targets.Select(t => ((MethodBase)t.Target, typeof(PortToggleMode))),
         (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
         (MapNodeText.Target, typeof(MapNodeText)),
+        (MusicSeek.Target, typeof(MusicSeek)),
     ];
 
     /// <summary>True only when every patch is installed.</summary>
