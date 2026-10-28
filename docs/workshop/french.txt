@@ -1,0 +1,41 @@
+Unofficial Patch
+[h1]Unofficial Patch[/h1]
+[i]Des correctifs communautaires contre les saccades et les désynchronisations multijoueur de Cosmoteer.[/i]
+
+Une collection croissante de correctifs pour des problèmes du jeu de base. Chaque correctif ne touche que le code fautif : vaisseaux, pièces, équilibrage et graphismes restent ceux d'origine.
+
+[h2]Images plus fluides : moins de saccades dues au ramasse-miettes[/h2]
+Le jeu marque régulièrement une courte pause pour libérer de la mémoire (ramasse-miettes). Plus il crée d'objets éphémères, plus cela arrive souvent. Ce mod supprime plusieurs des plus grosses sources :
+[list]
+[*][b]Pièces de vaisseau :[/b] les pièces avec ports réseau, interrupteurs et fournisseurs de statistiques créaient un nouvel objet à chaque image. Il est désormais créé une seule fois par pièce.
+[*][b]Musique de fond :[/b] les couches musicales coupées étaient décodées en permanence alors que personne ne les entend. Elles ne le sont plus que lorsqu'elles sont réellement jouées ; le son est identique au bit près.
+[*][b]Particules :[/b] chaque test d'une particule contre la vue de la minicarte créait un petit objet, ce qui s'accumulait dans les grandes batailles. Le test n'en crée plus aucun ; les mêmes particules apparaissent.
+[*][b]Propulseurs :[/b] le calcul d'accélération du vaisseau construisait puis jetait une table temporaire. Les résultats sont identiques au bit près.
+[*][b]Carte galactique :[/b] les étiquettes des nœuds étaient reconstruites à chaque image. Leur texte est désormais mis en cache.
+[/list]
+[BENCH RESULTS]
+
+[h2]Multijoueur : moins de désynchronisations[/h2]
+Pendant la mise à jour parallèle des vaisseaux, le jeu modifiait certaines valeurs partagées depuis deux threads à la fois : une modification pouvait se perdre ou s'appliquer dans un autre ordre chez certains joueurs. Ces modifications sont désormais mises en file et appliquées juste après la mise à jour, dans un ordre fixe :
+[list]
+[*][b]L'argent du joueur[/b], quand deux de vos vaisseaux commercent avec des stations (ou se font rembourser des ressources achetées d'avance) au même moment.
+[*][b]Les missions de livraison des stations[/b], quand deux vaisseaux commercent avec la même station au même moment.
+[*][b]L'équipage travaillant sur une tâche d'un autre vaisseau[/b] (transfert de ressources entre vos propres vaisseaux, aide à la construction d'un autre vaisseau).
+[/list]
+Cela corrige des bugs précis. Des désynchronisations ayant d'autres causes restent possibles.
+
+[h2]Requis : Yet Another Mod Loader[/h2]
+Les correctifs tournent dans une bibliothèque C# et nécessitent [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].
+[olist]
+[*]Abonnez-vous au chargeur et attendez la fin du téléchargement.
+[*]Fermez le jeu. Ouvrez [b]<Steam>\steamapps\workshop\content\799600\3577650065[/b] et lancez [b]Installer.bat[/b].
+[*]Lancez le jeu, activez Unofficial Patch dans la liste des mods, faites confiance à sa bibliothèque (DLL) quand le jeu le demande, puis redémarrez.
+[*]Après chaque mise à jour de ce mod, faites de nouveau confiance à la bibliothèque.
+[/olist]
+
+[h2]Multijoueur et désinstallation[/h2]
+[list]
+[*]Tous les joueurs ont besoin du mod, dans la même version, avec le même chargeur et la même version du jeu.
+[*]Si une mise à jour du jeu modifie le code corrigé, le mod se désactive de lui-même et le jeu tourne comme à l'origine.
+[*]Retrait sans risque : il n'ajoute aucune pièce et n'enregistre rien de son côté.
+[/list]

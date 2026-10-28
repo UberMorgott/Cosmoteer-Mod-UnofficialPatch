@@ -1,0 +1,41 @@
+Unofficial Patch
+[h1]Unofficial Patch[/h1]
+[i]Correcciones de la comunidad contra los tirones y las desincronizaciones multijugador del Cosmoteer original.[/i]
+
+Una colección creciente de correcciones para fallos del juego base. Cada corrección toca solo el código defectuoso: naves, piezas, equilibrio y gráficos siguen siendo los originales.
+
+[h2]Imagen más fluida: menos tirones por recolección de basura[/h2]
+El juego se detiene un instante con frecuencia para liberar memoria (recolección de basura). Cuantos más objetos de vida corta crea, más a menudo ocurre. Este mod elimina varias de las mayores fuentes:
+[list]
+[*][b]Piezas de nave:[/b] las piezas con puertos de red, interruptores y proveedores de estadísticas creaban un objeto nuevo en cada fotograma. Ahora se crea una sola vez por pieza.
+[*][b]Música de fondo:[/b] las capas de música silenciadas se decodificaban todo el rato aunque nadie las oye. Ahora solo se decodifican cuando realmente suenan; el audio es idéntico bit a bit.
+[*][b]Partículas:[/b] cada comprobación de una partícula contra la vista del minimapa creaba un pequeño objeto, y en las grandes batallas se acumulaban. Ahora no se crea ninguno; aparecen las mismas partículas.
+[*][b]Propulsores:[/b] el cálculo de aceleración de la nave construía y desechaba una tabla temporal. Los resultados son idénticos bit a bit.
+[*][b]Mapa galáctico:[/b] las etiquetas de los nodos se reconstruían en cada fotograma. Ahora su texto se guarda en caché.
+[/list]
+[BENCH RESULTS]
+
+[h2]Multijugador: menos desincronizaciones[/h2]
+Durante la actualización paralela de las naves, el juego modificaba algunos valores compartidos desde dos hilos a la vez, así que un cambio podía perderse o aplicarse en otro orden en algunos clientes. Ahora esos cambios se ponen en cola y se aplican justo después de la actualización, en un orden fijo:
+[list]
+[*][b]Dinero del jugador[/b], cuando dos de tus naves comercian con estaciones (o reciben el reembolso de recursos comprados por adelantado) al mismo tiempo.
+[*][b]Misiones de entrega de las estaciones[/b], cuando dos naves comercian con la misma estación al mismo tiempo.
+[*][b]Tripulación trabajando en una tarea de otra nave[/b] (mover recursos entre tus propias naves, ayudar a construir otra nave).
+[/list]
+Esto corrige errores concretos. Las desincronizaciones con otras causas aún pueden ocurrir.
+
+[h2]Requisito: Yet Another Mod Loader[/h2]
+Las correcciones funcionan en una biblioteca de C# y necesitan [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].
+[olist]
+[*]Suscríbete al cargador y espera a que se descargue.
+[*]Cierra el juego. Abre [b]<Steam>\steamapps\workshop\content\799600\3577650065[/b] y ejecuta [b]Installer.bat[/b].
+[*]Inicia el juego, activa Unofficial Patch en la lista de mods, confía en su biblioteca (DLL) cuando se te pida y reinicia.
+[*]Tras cada actualización de este mod, vuelve a confiar en la biblioteca.
+[/olist]
+
+[h2]Multijugador y desinstalación[/h2]
+[list]
+[*]Todos los jugadores necesitan el mod, en la misma versión, con el mismo cargador y la misma versión del juego.
+[*]Si una actualización del juego cambia el código parcheado, el mod se desactiva solo y el juego funciona como el original.
+[*]Se puede quitar sin riesgo: no añade piezas ni guarda datos propios.
+[/list]

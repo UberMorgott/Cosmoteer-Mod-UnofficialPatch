@@ -1,0 +1,41 @@
+Unofficial Patch
+[h1]Unofficial Patch[/h1]
+[i]Community fixes for stutter and multiplayer desyncs in vanilla Cosmoteer.[/i]
+
+A growing collection of fixes for problems in the base game. Each fix changes only the faulty code path: ships, parts, balance and visuals stay vanilla.
+
+[h2]Smoother frames: less garbage-collection stutter[/h2]
+The game regularly pauses for a moment to clean up memory (garbage collection). The more short-lived objects it creates, the more often this happens. This mod removes several of the biggest sources:
+[list]
+[*][b]Ship parts:[/b] parts with network ports, toggles and stat providers created a new object every frame. Now created once per part.
+[*][b]Background music:[/b] muted music layers were decoded all the time although nobody hears them. They are now only decoded when actually played; the sound is bit-identical.
+[*][b]Particles:[/b] every particle check against the minimap view created a small object, adding up in big battles. The check now creates none; the same particles appear.
+[*][b]Thrusters:[/b] the ship acceleration calculation built and threw away a temporary table. Results are bit-identical.
+[*][b]Galaxy map:[/b] node labels were rebuilt every frame. Their text is now cached.
+[/list]
+[BENCH RESULTS]
+
+[h2]Multiplayer: fewer desyncs[/h2]
+During the parallel ship update the game changed some shared values from two threads at once, so one change could be lost or applied in a different order on some clients. These changes are now queued and applied right after the update, in a fixed order:
+[list]
+[*][b]Player money[/b] when two of your ships trade with stations (or get pre-purchased resources refunded) at the same moment.
+[*][b]Station delivery missions[/b] when two ships trade with the same station at the same moment.
+[*][b]Crew working on another ship's job[/b] (moving resources between your own ships, helping build another ship).
+[/list]
+These fix specific bugs. Desyncs with other causes can still happen.
+
+[h2]Required: Yet Another Mod Loader[/h2]
+The fixes run in a C# library and need [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].
+[olist]
+[*]Subscribe to the loader and wait for the download.
+[*]Close the game. Open [b]<Steam>\steamapps\workshop\content\799600\3577650065[/b] and run [b]Installer.bat[/b].
+[*]Start the game, enable Unofficial Patch in the Mods list, trust its library (DLL) when asked, and restart.
+[*]After every update of this mod, trust the library again.
+[/olist]
+
+[h2]Multiplayer and removal[/h2]
+[list]
+[*]All players need the mod, in the same version, with the same loader and game version.
+[*]If a game update changes the patched code, the mod switches itself off and the game runs vanilla.
+[*]Safe to remove: it adds no parts and saves nothing of its own.
+[/list]

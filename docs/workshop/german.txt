@@ -1,0 +1,41 @@
+Unofficial Patch
+[h1]Unofficial Patch[/h1]
+[i]Community-Fixes gegen Ruckler und Multiplayer-Desyncs im unveränderten Cosmoteer.[/i]
+
+Eine wachsende Sammlung von Fehlerbehebungen für das Grundspiel. Jeder Fix ändert nur die fehlerhafte Stelle im Code: Schiffe, Bauteile, Balance und Grafik bleiben wie im Original.
+
+[h2]Flüssigere Bilder: weniger Ruckler durch Garbage Collection[/h2]
+Das Spiel hält regelmäßig kurz an, um Speicher aufzuräumen (Garbage Collection). Je mehr kurzlebige Objekte es erzeugt, desto öfter passiert das. Diese Mod beseitigt einige der größten Verursacher:
+[list]
+[*][b]Schiffsteile:[/b] Teile mit Netzwerk-Ports, Schaltern und Wertelieferanten erzeugten jedes Bild ein neues Objekt. Jetzt nur noch einmal pro Teil.
+[*][b]Hintergrundmusik:[/b] Stummgeschaltete Musikspuren wurden ständig dekodiert, obwohl sie niemand hört. Jetzt erst, wenn sie wirklich abgespielt werden; der Klang ist bitgenau gleich.
+[*][b]Partikel:[/b] Jede Prüfung eines Partikels gegen die Minikarten-Ansicht erzeugte ein kleines Objekt, was sich in großen Schlachten summierte. Jetzt entsteht keines mehr; es erscheinen dieselben Partikel.
+[*][b]Triebwerke:[/b] Die Beschleunigungsberechnung baute eine temporäre Tabelle und warf sie wieder weg. Die Ergebnisse sind bitgenau gleich.
+[*][b]Galaxiekarte:[/b] Die Beschriftungen der Knoten wurden jedes Bild neu erstellt. Ihr Text wird jetzt zwischengespeichert.
+[/list]
+[BENCH RESULTS]
+
+[h2]Multiplayer: weniger Desyncs[/h2]
+Beim parallelen Schiffs-Update änderte das Spiel manche gemeinsamen Werte aus zwei Threads gleichzeitig. Dadurch konnte eine Änderung verloren gehen oder bei einigen Spielern in anderer Reihenfolge ankommen. Diese Änderungen werden jetzt gesammelt und direkt nach dem Update in fester Reihenfolge angewendet:
+[list]
+[*][b]Geld der Spieler[/b], wenn zwei deiner Schiffe gleichzeitig mit Stationen handeln (oder vorab gekaufte Ressourcen erstattet bekommen).
+[*][b]Liefermissionen der Stationen[/b], wenn zwei Schiffe gleichzeitig mit derselben Station handeln.
+[*][b]Crew, die an einem Auftrag eines anderen Schiffs arbeitet[/b] (Ressourcen zwischen eigenen Schiffen bewegen, beim Bau eines anderen Schiffs helfen).
+[/list]
+Das behebt bestimmte Fehler. Desyncs mit anderen Ursachen sind weiterhin möglich.
+
+[h2]Benötigt: Yet Another Mod Loader[/h2]
+Die Fixes laufen in einer C#-Bibliothek und brauchen [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].
+[olist]
+[*]Abonniere den Loader und warte, bis er heruntergeladen ist.
+[*]Schließe das Spiel. Öffne [b]<Steam>\steamapps\workshop\content\799600\3577650065[/b] und starte [b]Installer.bat[/b].
+[*]Starte das Spiel, aktiviere Unofficial Patch in der Mod-Liste, vertraue der Bibliothek (DLL), wenn gefragt, und starte neu.
+[*]Nach jedem Update dieser Mod musst du der Bibliothek erneut vertrauen.
+[/olist]
+
+[h2]Multiplayer und Entfernen[/h2]
+[list]
+[*]Alle Spieler brauchen die Mod in derselben Version, mit demselben Loader und derselben Spielversion.
+[*]Ändert ein Spielupdate den gepatchten Code, schaltet sich die Mod selbst ab und das Spiel läuft unverändert.
+[*]Gefahrlos entfernbar: Sie fügt keine Bauteile hinzu und speichert nichts Eigenes.
+[/list]
