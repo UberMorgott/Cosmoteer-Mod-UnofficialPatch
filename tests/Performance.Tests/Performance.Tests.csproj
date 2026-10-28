@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Headless checks against the installed game's real Cosmoteer.dll (resolved from GameBin at run time, see GameAssemblies). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <ModLoaderDir>D:\Steam\steamapps\workshop\content\799600\3577650065</ModLoaderDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Performance.csproj" />
+    <!-- The loader's Harmony build, copied so the tests can read IL and patch the real method. -->
+    <Reference Include="0Harmony">
+      <HintPath>$(ModLoaderDir)\0Harmony.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit.v3.mtp-off" Version="4.0.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" />
+  </ItemGroup>
+</Project>
