@@ -7,7 +7,9 @@ NVorbis 154 MB, ThrusterManager dict 138 MB.
 - [x] Patch BaseBlueprintPartNetworkPort.UpdateOperational delegate alloc (d5f9b0c, f670567), deployed to Mods\Performance
 - [ ] A/B profile after game restart, same save/camera/cap: MB/s, GC pauses, frame time p95/p99
 - [ ] Live check: mixed MP lobby (mod on one side only)
-- [ ] Measure other GetToggleMode sites: BlueprintPartNetworkToggle.cs:96, BlueprintPartStatProvider.cs:94
+- [x] Other GetToggleMode sites (BlueprintPartStatProvider.UpdateOperational 32.9 MB/20 s, BlueprintPartNetworkToggle.UpdateToggleFromRules): same ldftn/newobj shape, folded into PortToggleMode (fa0c213), not deployed
+- [x] Music: muted layers seek NVorbis every buffer (~193 MB/20 s); DeferredSeekStream wraps the "music" factory, replays last two seeks on read (bit-identical, Codex-reviewed), not deployed
+- [ ] A/B profile of music + toggle patches in game (alloc MB/s, GC pauses)
 - [x] ThrusterManager.CalculateMaximumAccelerationAndRampTimeCached: skip throwaway dict for non-cached directions, presize (31685f3, bd1a7a5), not deployed
 - [x] CareerGameModeManager.GetMapNodeText: cache base text suffix, invalidate on language/rules reload (ecc3645, dc38e4e), not deployed
 - [ ] Report DeWintersTC.Shields allocations/CPU to its author
