@@ -15,8 +15,7 @@ namespace Performance;
 /// <summary>
 /// MP freeze telemetry, log only (every peer, main thread): per remote player the margin in ticks with which each InputTick
 /// arrived (0 = just in time, after the sim had to wait for it), sim stalls waiting for inputs (count, total, longest,
-/// including one still open), and on the host the input delay this mod applied vs vanilla's and each connection's ping
-/// window. One summary line every 10 s; counters are preallocated, only the summary line allocates.
+/// including one still open), and on the host the game's input delay and each connection's ping window. One summary line every 10 s; counters are preallocated, only the summary line allocates.
 /// </summary>
 internal static class NetTelemetry
 {
@@ -130,7 +129,7 @@ internal static class NetTelemetry
         }
         if (mp is MPHostManager host)
         {
-            sb.Append(CultureInfo.InvariantCulture, $"; delay {InputDelay.Last.Applied} (target {InputDelay.Last.Target}, vanilla {InputDelay.Last.Vanilla})");
+            sb.Append(CultureInfo.InvariantCulture, $"; delay {host._inputTickDelay}");
             foreach (RemoteConnection c in host._connections)
             {
                 double max = 0;

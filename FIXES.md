@@ -4,16 +4,16 @@ Player-facing list of every fix and change, used for the Workshop page and chang
 One line per fix: what was wrong → what the mod does. Newest first inside each section.
 Mark entries not yet released as (unreleased).
 
-## Multiplayer: freezes
-
-- The whole multiplayer game froze for a moment whenever one player's inputs arrived late. The host chose the input delay from the two best connections' average ping, so a far or jittery player got too little delay. The delay now covers the two slowest connections' worst recent ping, rises at once when the network gets worse and comes back down one step at a time after 5 calm seconds. The mod log also gets a 10-second network summary (freezes, how early inputs arrived, ping per player). All players need this mod. (unreleased)
-
 ## Multiplayer: desyncs
 
 - Crew working a job of another ship (moving resources between your own ships, helping build another ship) could change that job from two threads at once in multiplayer, so its progress or crew list could differ between clients. When such a crew arrives or gives up on a path while on its own ship, the step is now queued and applied right after the parallel ship update, the same way the game already handles crew on other ships. All players need this mod. (unreleased)
 - Station delivery missions could go out of sync in multiplayer: when two ships traded with the same station at the same moment, the game updated the station's offered delivery mission progress from two threads at once, so an update could be lost or applied in a different order on some clients. These updates are now queued and applied right after the parallel ship update, in the game's fixed ship order. All players need this mod. (unreleased)
 
 - Player money could go out of sync in multiplayer: when two ships of the same player traded with stations (or got pre-purchased resources refunded) at the same moment, the game updated the balance from two threads at once and one change could be lost on some clients. Money changes made during the parallel ship update are now collected safely and applied once, in a fixed order, right after it. All players need this mod. (unreleased)
+
+## Multiplayer: diagnostics
+
+- The mod log gets a 10-second network summary (freezes, input arrival margin, ping per player) to help diagnose multiplayer lag. Log only, gameplay is unchanged. (unreleased)
 
 ## Performance: stutter and FPS spikes
 
