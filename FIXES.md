@@ -22,3 +22,7 @@ Mark entries not yet released as (unreleased).
 - Muted background music layers were decoded on every audio buffer even though nobody hears them, producing ~190 MB of garbage per 20 s. Seeking is now deferred until the layer is actually read; audio output is bit-identical. (unreleased)
 - Ship thruster acceleration calculation built and threw away a temporary dictionary on every cache miss. It now skips the throwaway and pre-sizes the kept one; results are bit-identical. (unreleased)
 - Galaxy map node labels were rebuilt as new strings every frame. The base label text is now cached per node and refreshed on language or rules change. (unreleased)
+
+## Experimental (off unless you turn it on)
+
+- Server GC: the game uses .NET's workstation garbage collector. Opt-in switch to the server collector (`System.GC.Server` in `Cosmoteer\Bin\Cosmoteer.runtimeconfig.json`, only that key is changed, original backed up once as `.unofficialpatch.bak`). Vanilla bench: frame p99 -18%, GC pause time -71%, frames over 33 ms -74%, but the worst single frame +33% and short spikes (over 2x median) 0.9 → 3.0 per minute, and more RAM. Enable: create an empty file `%USERPROFILE%\Saved Games\Cosmoteer\unofficial-patch-server-gc.txt`, start the game once, restart it. Disable: delete that file, start the game once (the mod restores the previous value if the config was not changed since), restart. If you remove the mod first, delete `"System.GC.Server": true` from that config by hand. Steam "Verify integrity of game files" also resets it. (unreleased)
