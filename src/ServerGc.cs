@@ -6,12 +6,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Cosmoteer;
+using HarmonyLib;
 
 namespace Performance;
 
 /// <summary>
 /// Experimental opt-in: .NET Server GC via System.GC.Server in the game's runtimeconfig.json (read by the host at the
-/// next launch). Opt-in = the flag file at <see cref="FlagPath"/> (outside Workshop content, so mod updates keep it).
+/// next launch). Opt-in = <see cref="FlagFile"/> in the game's save root (outside Workshop content, so mod updates keep it).
 /// Only our key is touched; a marker next to the config records the prior value and the hash of the file we wrote,
 /// so opt-out restores that value only if nobody (game update, user) changed the file since.
 /// </summary>
@@ -20,17 +22,21 @@ internal static class ServerGc
     private const string Key = "System.GC.Server";
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
-    // Vanilla's default save root (Paths.GetDefaultRootSavePath, first branch) without the Steam ID, which is unknown
-    // this early. shortcut: a relocated Saved Games known folder is not followed; upgrade if players ask.
-    internal static string FlagPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Saved Games", "Cosmoteer", "unofficial-patch-server-gc.txt");
+    internal const string FlagFile = "unofficial-patch-server-gc.txt";
 
-    public static void Apply()
+    /// <summary>Runs once the game has created its save root (Steam and platform are up, so Paths.RootSavePath is final).</summary>
+    internal static MethodInfo Target =>
+        AccessTools.Method(typeof(GameApp), nameof(GameApp.SetupDirectories))
+        ?? throw new MissingMethodException(nameof(GameApp), nameof(GameApp.SetupDirectories));
+
+    public static void Postfix()
     {
         try
         {
+            // The game's own save root: --rootsavepath, moved Saved Games folders and the Steam ID all resolved by vanilla.
+            string flag = Path.Combine(Paths.RootSavePath, FlagFile);
             string name = Assembly.GetEntryAssembly()?.GetName().Name ?? "Cosmoteer";
-            if (Sync(Path.Combine(AppContext.BaseDirectory, name + ".runtimeconfig.json"), File.Exists(FlagPath)) is { } msg)
+            if (Sync(Path.Combine(AppContext.BaseDirectory, name + ".runtimeconfig.json"), File.Exists(flag)) is { } msg)
             {
                 Log.Info(msg);
             }

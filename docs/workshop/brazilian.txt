@@ -41,4 +41,4 @@ As correções rodam numa biblioteca C# e precisam do [url=https://steamcommunit
 [/list]
 
 [h2]Experimental: GC de servidor (desligado por padrão)[/h2]
-Troca o .NET para o coletor de lixo de servidor. Nos nossos testes: pausas de GC menos frequentes e mais curtas (p99 de quadros -18%), mas mais travadinhas curtas e um pior quadro mais lento (+33%). Ativar: crie um arquivo vazio [b]%USERPROFILE%\Saved Games\Cosmoteer\unofficial-patch-server-gc.txt[/b], abra o jogo uma vez e reinicie. Desativar: apague o arquivo, abra uma vez, reinicie. "Verificar integridade dos arquivos" da Steam também o desliga.
+Troca o .NET para o coletor de lixo de servidor. Nos nossos testes: pausas de GC menos frequentes e mais curtas (p99 de quadros -18%), mas mais travadinhas curtas e um pior quadro mais lento (+33%). Ativar: crie um arquivo vazio [b]unofficial-patch-server-gc.txt[/b] na pasta Cosmoteer em Saved Games (ao lado de Saved Ships), abra o jogo uma vez e reinicie. Desativar: apague o arquivo, abra uma vez, reinicie. "Verificar integridade dos arquivos" da Steam também o desliga.

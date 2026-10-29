@@ -42,6 +42,7 @@ internal static class Patcher
         (InputDelaySamples.Target, typeof(InputDelaySamples)),
         (InputArrivalTelemetry.Target, typeof(InputArrivalTelemetry)),
         (StallTelemetry.Target, typeof(StallTelemetry)),
+        (ServerGc.Target, typeof(ServerGc)),
     ];
 
     /// <summary>True only when every patch is installed.</summary>

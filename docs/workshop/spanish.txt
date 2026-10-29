@@ -41,4 +41,4 @@ Las correcciones funcionan en una biblioteca de C# y necesitan [url=https://stea
 [/list]
 
 [h2]Experimental: GC de servidor (desactivado por defecto)[/h2]
-Cambia .NET a su recolector de basura de servidor. En nuestras pruebas: pausas de GC menos frecuentes y más cortas (p99 de fotogramas -18 %), pero más tirones cortos y un peor fotograma más lento (+33 %). Activar: crea un archivo vacío [b]%USERPROFILE%\Saved Games\Cosmoteer\unofficial-patch-server-gc.txt[/b], inicia el juego una vez y reinícialo. Desactivar: borra el archivo, inicia una vez y reinicia. "Verificar la integridad de los archivos" de Steam también lo desactiva.
+Cambia .NET a su recolector de basura de servidor. En nuestras pruebas: pausas de GC menos frecuentes y más cortas (p99 de fotogramas -18 %), pero más tirones cortos y un peor fotograma más lento (+33 %). Activar: crea un archivo vacío [b]unofficial-patch-server-gc.txt[/b] en la carpeta Cosmoteer de Saved Games (junto a Saved Ships), inicia el juego una vez y reinícialo. Desactivar: borra el archivo, inicia una vez y reinicia. "Verificar la integridad de los archivos" de Steam también lo desactiva.

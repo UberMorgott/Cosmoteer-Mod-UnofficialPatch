@@ -16,7 +16,6 @@ public static class Main
         }
         _initialized = true;
         Log.Init();
-        ServerGc.Apply(); // takes effect next launch; independent of the patches
         // false = rolled back to vanilla (logged); nothing else depends on the patches. An incomplete rollback throws on
         // purpose: the loader logs initializer exceptions and still starts the game, which is safe because every patch
         // keeps vanilla sim behavior, so no exit is forced.

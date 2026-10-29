@@ -20,7 +20,7 @@ switches itself off and the game runs vanilla.
 ## Experimental: Server GC (opt-in)
 
 Off by default. Create an empty file
-`%USERPROFILE%\Saved Games\Cosmoteer\unofficial-patch-server-gc.txt`, start the
+`unofficial-patch-server-gc.txt` in the Cosmoteer folder in Saved Games (next to Saved Ships), start the
 game once and restart: the mod sets `System.GC.Server: true` in
 `<game>\Bin\Cosmoteer.runtimeconfig.json` (only that key; original backed up
 once as `Cosmoteer.runtimeconfig.json.unofficialpatch.bak`). Delete the file,
