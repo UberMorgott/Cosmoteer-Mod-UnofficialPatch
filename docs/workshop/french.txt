@@ -39,3 +39,6 @@ Les correctifs tournent dans une bibliothèque C# et nécessitent [url=https://s
 [*]Si une mise à jour du jeu modifie le code corrigé, le mod se désactive de lui-même et le jeu tourne comme à l'origine.
 [*]Retrait sans risque : il n'ajoute aucune pièce et n'enregistre rien de son côté.
 [/list]
+
+[h2]Expérimental : GC serveur (désactivé par défaut)[/h2]
+Passe .NET sur son ramasse-miettes serveur. Dans nos tests : pauses GC moins nombreuses et plus courtes (p99 des images -18 %), mais plus de petits à-coups et une pire image plus longue (+33 %). Activer : créez un fichier vide [b]%USERPROFILE%\Saved Games\Cosmoteer\unofficial-patch-server-gc.txt[/b], lancez le jeu une fois, puis relancez-le. Désactiver : supprimez le fichier, lancez une fois, relancez. La « vérification de l'intégrité des fichiers » de Steam le désactive aussi.

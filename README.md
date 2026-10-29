@@ -17,6 +17,17 @@ The mod changes simulation code, so every player needs the same mod version,
 loader and game version. If a game update changes the patched code, the mod
 switches itself off and the game runs vanilla.
 
+## Experimental: Server GC (opt-in)
+
+Off by default. Create an empty file
+`%USERPROFILE%\Saved Games\Cosmoteer\unofficial-patch-server-gc.txt`, start the
+game once and restart: the mod sets `System.GC.Server: true` in
+`<game>\Bin\Cosmoteer.runtimeconfig.json` (only that key; original backed up
+once as `Cosmoteer.runtimeconfig.json.unofficialpatch.bak`). Delete the file,
+start once and restart to undo. Smoother on average (p99 frame -18%, GC pause
+-71%), but more short spikes (worst frame +33%, 0.9 → 3.0 per minute). Without the mod, remove the
+key by hand; Steam "verify files" also resets it. Details: [FIXES.md](FIXES.md).
+
 ## Build and test
 
 Requires the .NET 10 SDK and a local Cosmoteer install (`GameBin` in

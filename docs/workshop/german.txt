@@ -39,3 +39,6 @@ Die Fixes laufen in einer C#-Bibliothek und brauchen [url=https://steamcommunity
 [*]Ändert ein Spielupdate den gepatchten Code, schaltet sich die Mod selbst ab und das Spiel läuft unverändert.
 [*]Gefahrlos entfernbar: Sie fügt keine Bauteile hinzu und speichert nichts Eigenes.
 [/list]
+
+[h2]Experimentell: Server-GC (standardmäßig aus)[/h2]
+Schaltet .NET auf den Server-Garbage-Collector um. In unseren Tests: weniger und kürzere GC-Pausen (Frame-p99 -18 %), aber mehr kurze Ruckler und ein schlechterer schlimmster Frame (+33 %). Einschalten: leere Datei [b]%USERPROFILE%\Saved Games\Cosmoteer\unofficial-patch-server-gc.txt[/b] anlegen, Spiel einmal starten, dann neu starten. Ausschalten: Datei löschen, einmal starten, neu starten. Steams "Dateien auf Fehler überprüfen" schaltet es ebenfalls aus.
