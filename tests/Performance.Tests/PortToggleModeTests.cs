@@ -45,9 +45,16 @@ public class PortToggleModeTests
         var original = PatchProcessor.GetOriginalInstructions(Target(index));
         var patched = PortToggleMode.Transpiler(original, Target(index)).ToList();
 
-        Assert.Equal(original.Count, patched.Count);
         Assert.DoesNotContain(patched, i => i.opcode == OpCodes.Ldftn || i.opcode == OpCodes.Newobj);
         Assert.DoesNotContain(patched, i => i.opcode == OpCodes.Ldtoken);
+        if (index == 0)
+        {
+            Assert.Single(patched, i => i.operand is MethodInfo { Name: nameof(BlueprintToggleEvaluation.Evaluate) } m && m.DeclaringType == typeof(BlueprintToggleEvaluation));
+            Assert.DoesNotContain(patched, i => i.operand is MethodInfo { Name: "IsBlueprintToggleOn" });
+            Assert.Single(patched, i => i.operand is MethodInfo { Name: "SetOperational" });
+            return;
+        }
+        Assert.Equal(original.Count, patched.Count);
         Assert.Single(patched, i => i.opcode == OpCodes.Ldc_I4 && i.operand is int site && site == index);
         Assert.Equal("GetToggleMode", PortToggleMode.ToggleModes[index].Name);
         Assert.Equal(Target(index).DeclaringType, PortToggleMode.ToggleModes[index].DeclaringType);

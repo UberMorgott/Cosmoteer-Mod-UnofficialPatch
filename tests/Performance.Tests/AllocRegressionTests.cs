@@ -14,7 +14,6 @@ public class AllocRegressionTests
 {
     /// <summary>The transpiled delegate site, run as a DynamicMethod like Harmony's replacement, allocates nothing once cached.</summary>
     [Theory]
-    [InlineData(0, "Cosmoteer.Source.Ships.Blueprints.BlueprintPartNetworkPort")]
     [InlineData(1, "Cosmoteer.Ships.Blueprints.Logic.Values.BlueprintPartStatProvider")]
     [InlineData(2, "Cosmoteer.Ships.Blueprints.Logic.BlueprintPartNetworkToggle")]
     public void ToggleSiteAllocatesNothingPerCall(int index, string ownerType)

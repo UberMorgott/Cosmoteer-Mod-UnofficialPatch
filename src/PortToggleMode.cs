@@ -16,9 +16,8 @@ namespace Performance;
 /// <summary>
 /// Vanilla blueprint components that follow a rules toggle (network port, stat provider, network toggle) run an update
 /// per component every frame that allocates <c>new Func(this.GetToggleMode)</c> each time (~24% + ~2% of all allocations
-/// in an MP profile). The transpiler swaps only that ldftn/newobj pair for ldtoken/<see cref="Get"/>: one delegate per
-/// component, bound once. GetToggleMode reads live part/ship state on every call, so caching the binding (not results)
-/// needs no invalidation and keeps the sim identical.
+/// in an MP profile). The transpiler caches one delegate binding per component; the port also specializes the exact
+/// native UIToggle leaf inside a compatibility-validated update. GetToggleMode always reads live part/ship state.
 /// </summary>
 internal static class PortToggleMode
 {
@@ -52,7 +51,8 @@ internal static class PortToggleMode
     }
 
     /// <summary>
-    /// Whole vanilla body must match exactly (else throw: Patcher rolls back to vanilla); then ldftn+newobj -> ldc.i4 site+call Get.
+    /// Whole vanilla body must match exactly (else throw: Patcher rolls back to vanilla). The port delegates its bool
+    /// evaluation to the guarded helper; other sites replace ldftn+newobj with ldc.i4 site+call Get.
     /// Not ldtoken: in a Harmony replacement each ldtoken of a method allocates a RuntimeMethodInfoStub (96 B, more than the Func).
     /// </summary>
     public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
@@ -60,6 +60,17 @@ internal static class PortToggleMode
         int site = Array.FindIndex(Targets, t => t.Target.MetadataToken == original.MetadataToken && t.Target.Module == original.Module);
         (MethodInfo target, string sha) = Targets[site];
         List<CodeInstruction> code = Patcher.RequireIl(instructions, sha, $"{target.DeclaringType!.Name}.{target.Name}");
+        if (site == 0)
+        {
+            int evaluationEnd = code.FindIndex(c => c.operand is MethodInfo { Name: "IsBlueprintToggleOn" });
+            if (evaluationEnd < 1) throw new InvalidOperationException("Port toggle evaluation site missing");
+            // Keep the original SetOperational receiver, call, labels and scheduling. Only its bool argument changes.
+            var load = new CodeInstruction(OpCodes.Ldarg_0);
+            load.labels.AddRange(code[1].labels);
+            code.RemoveRange(1, evaluationEnd);
+            code.InsertRange(1, [load, new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(BlueprintToggleEvaluation), nameof(BlueprintToggleEvaluation.Evaluate)))]);
+            return code;
+        }
         int i = code.FindIndex(c => c.opcode == OpCodes.Ldftn);
         if (code[i].operand is not MethodInfo m || m.MetadataToken != ToggleModes[site].MetadataToken)
         {

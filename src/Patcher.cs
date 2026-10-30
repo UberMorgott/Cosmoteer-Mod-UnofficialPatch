@@ -26,10 +26,11 @@ internal static class Patcher
 {
     public const string HarmonyId = "morgott.performance";
 
-    /// <summary>Each target and the class holding its public static Prefix / Postfix / Transpiler (any subset).</summary>
+    /// <summary>Each target and its public static Prefix / Postfix / Transpiler / Finalizer (any subset).</summary>
     internal static (MethodBase Target, Type Patch)[] Patches =>
     [
         .. PortToggleMode.Targets.Select(t => ((MethodBase)t.Target, typeof(PortToggleMode))),
+        (BlueprintEvaluationScope.Target, typeof(BlueprintEvaluationScope)),
         (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
         (MapNodeText.Target, typeof(MapNodeText)),
         (MusicSeek.Target, typeof(MusicSeek)),
@@ -59,7 +60,7 @@ internal static class Patcher
             int inlinerCount = 0;
             foreach ((MethodBase target, Type patch, List<MethodBase> inliners) in patches)
             {
-                harmony.Patch(target, Hook(patch, "Prefix"), Hook(patch, "Postfix"), Hook(patch, "Transpiler"));
+                harmony.Patch(target, Hook(patch, "Prefix"), Hook(patch, "Postfix"), Hook(patch, "Transpiler"), Hook(patch, "Finalizer"));
                 foreach (MethodBase inliner in inliners)
                 {
                     harmony.Patch(inliner, transpiler: rejit);
@@ -85,6 +86,7 @@ internal static class Patcher
     /// <summary>Undoes every patch of this mod; throws if any is still installed afterwards (game is then not vanilla).</summary>
     internal static void RollBack(Action unpatchAll)
     {
+        BlueprintToggleEvaluation.EndValidatedUpdate();
         try
         {
             unpatchAll();
