@@ -9,12 +9,12 @@ public sealed class ServerGcTests : IDisposable
 {
     private const string Vanilla = """
         {
-          "runtimeOptions": {
-            "tfm": "net10.0",
-            "configProperties": {
-              "System.Reflection.Metadata.MetadataUpdater.IsSupported": false
+            "runtimeOptions": {
+                "tfm": "net10.0",
+                "configProperties": {
+                    "System.Reflection.Metadata.MetadataUpdater.IsSupported": false
+                }
             }
-          }
         }
         """;
 

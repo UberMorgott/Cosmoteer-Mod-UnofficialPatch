@@ -34,6 +34,8 @@ internal static class Patcher
         (MapNodeText.Target, typeof(MapNodeText)),
         (MusicSeek.Target, typeof(MusicSeek)),
         (MiniviewParticleBoxing.Target, typeof(MiniviewParticleBoxing)),
+        (RoofOpacity.Target, typeof(RoofOpacity)),
+        (MultiColorMax.Target, typeof(MultiColorMax)),
         (PlayerMoney.Target, typeof(PlayerMoney)),
         (PlayerMoneyFlush.Target, typeof(PlayerMoneyFlush)),
         .. MissionTrade.Targets.Select(t => ((MethodBase)t.Target, typeof(MissionTrade))),

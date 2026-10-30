@@ -17,11 +17,16 @@ Mark entries not yet released as (unreleased).
 
 ## Performance: stutter and FPS spikes
 
+- Every visible ship searched for the ship under the cursor while drawing its roof, even when the hide-roof key was released. The key is now checked first, avoiding repeated spatial searches and temporary garbage; roof appearance and held-key behavior are unchanged. (unreleased)
 - Particle effects checked against the minimap view created a small garbage object on every check (~60 MB per 20 s in big battles). The check now runs without it; which particles are emitted is unchanged. (unreleased)
 - Ship parts with network ports, toggles and stat providers created a new object every frame, which triggered frequent memory clean-ups (garbage collection) that cause stutter. Now created once per part. (unreleased)
 - Muted background music layers were decoded on every audio buffer even though nobody hears them, producing ~190 MB of garbage per 20 s. Seeking is now deferred until the layer is actually read; audio output is bit-identical. (unreleased)
 - Ship thruster acceleration calculation built and threw away a temporary dictionary on every cache miss. It now skips the throwaway and pre-sizes the kept one; results are bit-identical. (unreleased)
 - Galaxy map node labels were rebuilt as new strings every frame. The base label text is now cached per node and refreshed on language or rules change. (unreleased)
+
+## Graphics: incorrect colors
+
+- MultiColor components using RGB Max combined their inputs with a minimum operation, producing negative-infinite RGB values for finite source colors. They now take the maximum of each channel; other blend modes and alpha are unchanged. (unreleased)
 
 ## Experimental (off unless you turn it on)
 
