@@ -31,6 +31,14 @@
   </Target>
 
   <ItemGroup>
+    <Reference Include="SharpDX">
+      <HintPath>$(GameBin)\SharpDX.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpDX.Direct3D11">
+      <HintPath>$(GameBin)\SharpDX.Direct3D11.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Cosmoteer">
       <HintPath>lib\Cosmoteer.dll</HintPath>
       <Private>false</Private>

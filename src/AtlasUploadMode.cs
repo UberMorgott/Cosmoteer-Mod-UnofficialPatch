@@ -20,24 +20,28 @@ internal static class AtlasUploadMode
 {
     private const string BackendSha256 = "9BA521D4FB95456EB522036ACD83D3E1EC9BC80868AB2B48ABD554BC63B1221D";
     private static readonly Guid BackendMvid = new("7121448b-beeb-4b38-aaf7-77caa880be66");
-    internal static readonly bool Enabled = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_ATLAS_STATIC"));
+    private static readonly string? RequestedMode = Environment.GetEnvironmentVariable("PERFORMANCE_ATLAS_STATIC");
+    internal static readonly bool Enabled = IsRequested(RequestedMode);
     private static int _converted;
 
     internal static readonly ConstructorInfo Target = AccessTools.Constructor(typeof(AtlasQuadManager), [typeof(Ship), typeof(PerformanceMode)])
         ?? throw new MissingMethodException(nameof(AtlasQuadManager), ".ctor(Ship,PerformanceMode)");
 
-    internal static bool IsRequested(string? value) => value == "1";
+    internal static bool IsRequested(string? value) => value is "1" or "2" or "3";
 
     internal static PerformanceMode Select(bool enabled, PerformanceMode mode) =>
         enabled && mode == PerformanceMode.Dynamic ? PerformanceMode.Static : mode;
 
+    internal static PerformanceMode SelectRequest(string? requested, bool ready, PerformanceMode mode) =>
+        Select(IsRequested(requested) && (requested == "1" || ready), mode);
+
     public static void Prefix(ref PerformanceMode perfMode)
     {
-        PerformanceMode selected = Select(Enabled, perfMode);
+        PerformanceMode selected = SelectRequest(RequestedMode, AtlasPartialUploads.Ready, perfMode);
         if (selected == perfMode) return;
         perfMode = selected;
         if (Interlocked.Increment(ref _converted) == 1)
-            Log.Info("Native atlas Static backend experiment active: Dynamic -> Static (PERFORMANCE_ATLAS_STATIC=1)");
+            Log.Info("Native atlas Static backend experiment active: Dynamic -> Static (PERFORMANCE_ATLAS_STATIC=" + RequestedMode + ")");
     }
 
     public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)

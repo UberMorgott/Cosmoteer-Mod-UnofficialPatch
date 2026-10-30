@@ -30,7 +30,21 @@ public sealed class AtlasUploadModeTests
     [InlineData("true", false)]
     [InlineData("0", false)]
     [InlineData("1", true)]
+    [InlineData("2", true)]
+    [InlineData("3", true)]
+    [InlineData("4", false)]
     public void OptInRequiresExactValue(string? value, bool expected) => Assert.Equal(expected, AtlasUploadMode.IsRequested(value));
+
+    [Theory]
+    [InlineData(null, false, PerformanceMode.Dynamic)]
+    [InlineData("1", false, PerformanceMode.Static)]
+    [InlineData("2", false, PerformanceMode.Dynamic)]
+    [InlineData("2", true, PerformanceMode.Static)]
+    [InlineData("3", false, PerformanceMode.Dynamic)]
+    [InlineData("3", true, PerformanceMode.Static)]
+    [InlineData("4", true, PerformanceMode.Dynamic)]
+    public void PartialModesRequireReadyBeforeChangingNativeBackend(string? requested, bool ready, PerformanceMode expected) =>
+        Assert.Equal(expected, AtlasUploadMode.SelectRequest(requested, ready, PerformanceMode.Dynamic));
 
     [Fact]
     public void ConstructorPinPreservesWholeInstalledBodyAndRejectsChanges()
