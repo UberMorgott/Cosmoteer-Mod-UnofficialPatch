@@ -31,6 +31,7 @@ internal static class Patcher
     [
         .. PortToggleMode.Targets.Select(t => ((MethodBase)t.Target, typeof(PortToggleMode))),
         (BlueprintEvaluationScope.Target, typeof(BlueprintEvaluationScope)),
+        (AtlasUploadMode.Target, typeof(AtlasUploadMode)),
         (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
         (MapNodeText.Target, typeof(MapNodeText)),
         (MusicSeek.Target, typeof(MusicSeek)),
