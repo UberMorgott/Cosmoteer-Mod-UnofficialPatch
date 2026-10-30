@@ -34,6 +34,8 @@ internal static class Patcher
         (MapNodeText.Target, typeof(MapNodeText)),
         (MusicSeek.Target, typeof(MusicSeek)),
         (MiniviewParticleBoxing.Target, typeof(MiniviewParticleBoxing)),
+        .. ShaderConstantBoxing.Targets.Select(t => ((MethodBase)t, typeof(ShaderConstantBoxing))),
+        .. BeforeDrawUnsubscribe.Targets.Select(t => ((MethodBase)t, typeof(BeforeDrawUnsubscribe))),
         (RoofOpacity.Target, typeof(RoofOpacity)),
         (MultiColorMax.Target, typeof(MultiColorMax)),
         (PlayerMoney.Target, typeof(PlayerMoney)),
@@ -140,7 +142,7 @@ internal static class Patcher
         return code;
     }
 
-    /// <summary>Precompiled methods of Cosmoteer.dll containing an inlined copy of <paramref name="patched"/>. Throws if unsafe.</summary>
+    /// <summary>Precompiled methods in the target module containing an inlined copy of <paramref name="patched"/>. Throws if unsafe.</summary>
     internal static List<MethodBase> FindR2RInliners(MethodBase patched)
     {
         Module module = patched.Module;

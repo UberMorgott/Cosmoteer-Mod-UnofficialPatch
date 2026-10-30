@@ -17,6 +17,8 @@ Mark entries not yet released as (unreleased).
 
 ## Performance: stutter and FPS spikes
 
+- Large groups of part color handlers unsubscribed one by one after a clean draw, repeatedly copying the same event list. Cleanup is now batched between event mutations, preserving callback order, nested draws, color updates and detach behavior. (unreleased)
+- Shader constant updates boxed numbers, vectors, colors and matrices while checking whether their values had changed, creating substantial garbage when drawing ships and UI. The comparison now uses the same value equality without allocating; buffer writes and rendering stay unchanged. (unreleased)
 - Every visible ship searched for the ship under the cursor while drawing its roof, even when the hide-roof key was released. The key is now checked first, avoiding repeated spatial searches and temporary garbage; roof appearance and held-key behavior are unchanged. (unreleased)
 - Particle effects checked against the minimap view created a small garbage object on every check (~60 MB per 20 s in big battles). The check now runs without it; which particles are emitted is unchanged. (unreleased)
 - Ship parts with network ports, toggles and stat providers created a new object every frame, which triggered frequent memory clean-ups (garbage collection) that cause stutter. Now created once per part. (unreleased)

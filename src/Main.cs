@@ -2,7 +2,8 @@ namespace Performance;
 
 /// <summary>
 /// Entry point called by Yet Another Mod Loader (public static void GameLoadInitializer()). The loader calls it from its
-/// Application.Main prefix, i.e. before any game code has run.
+/// GenericApp.ApplicationMain prefix, before the game loop. GameApp construction and initial graphics setup have
+/// already run, so live allocation checks are still required to verify that prior JIT inlining cannot bypass a patch.
 /// </summary>
 public static class Main
 {
