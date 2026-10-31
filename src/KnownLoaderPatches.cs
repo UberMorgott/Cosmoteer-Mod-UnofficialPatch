@@ -19,7 +19,8 @@ internal static class KnownLoaderPatches
     private static readonly Guid LoaderMvid = new("a58d1d86-b6b1-4f82-856b-049a81d2cd7c");
     private static readonly ConditionalWeakTable<Module, Lazy<Proof>> Proofs = new();
     internal enum Kind { Prefix, Postfix, Transpiler, Finalizer, InnerPrefix, InnerPostfix }
-    internal readonly record struct Registration(MethodBase Target, string Owner, Kind HookKind, MethodInfo Hook);
+    internal readonly record struct Registration(MethodBase Target, string Owner, Kind HookKind, MethodInfo Hook,
+        int Index = 0, int Priority = 400, string[]? Before = null, string[]? After = null, bool Debug = false, InnerMethod? InnerMethod = null);
     private readonly record struct Spec(int Module, int Target, Kind Kind, int Patch, string NativeHash, string PatchHash);
     private static readonly Spec[] Specs =
     [
@@ -37,9 +38,22 @@ internal static class KnownLoaderPatches
     internal sealed class Proof
     {
         private readonly Registration[] _allowed;
+        internal ReadOnlySpan<Registration> Allowed => _allowed;
+        private int[]? _installedIndices;
         internal Proof(Registration[] allowed) => _allowed = allowed;
         internal Registration[] Copy() => (Registration[])_allowed.Clone();
-        internal bool Allows(Registration registration) => Array.Exists(_allowed, expected => Match(expected, registration));
+        internal bool Allows(Registration registration)
+        {
+            for (int i = 0; i < _allowed.Length; i++)
+                if (Match(_allowed[i], registration) && DefaultMetadata(registration) &&
+                    (_installedIndices == null || registration.Index == _installedIndices[i])) return true;
+            return false;
+        }
+        internal void ValidateIndices(int[] indices)
+        {
+            int[] baseline = Volatile.Read(ref _installedIndices) ?? Interlocked.CompareExchange(ref _installedIndices, (int[])indices.Clone(), null) ?? indices;
+            if (!baseline.AsSpan().SequenceEqual(indices)) throw new NotSupportedException("Loader installation ordering changed");
+        }
     }
     internal static Registration[] Expected(Module module) => GetProof(module).Copy();
     private static Proof GetProof(Module module) => Proofs.GetValue(module, key => new Lazy<Proof>(() => ReadProof(key), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
@@ -87,6 +101,9 @@ internal static class KnownLoaderPatches
     private static bool IsLoader(Module module) => module.Assembly.GetName().Name == "ModLoader";
     private static bool Same(MethodBase a, MethodBase b) => ReferenceEquals(a.Module, b.Module) && a.Equals(b);
     private static bool Match(Registration a, Registration b) => a.Owner == b.Owner && a.HookKind == b.HookKind && Same(a.Target, b.Target) && Same(a.Hook, b.Hook);
+    private static bool DefaultMetadata(Registration registration) => registration.Index >= 0 && registration.Priority == 400 &&
+        (registration.Before == null || registration.Before.Length == 0) && (registration.After == null || registration.After.Length == 0) &&
+        !registration.Debug && registration.InnerMethod == null;
     internal static string Describe(Registration patch)
     {
         static string Bounded(string text, int limit) => text.Length <= limit ? text : text[..limit];
@@ -95,7 +112,7 @@ internal static class KnownLoaderPatches
     }
     internal static Proof Validate(IEnumerable<Registration> registrations, Module[] loaderModules)
     {
-        Registration[] all = registrations.ToArray();
+        Registration[] all = registrations as Registration[] ?? registrations.ToArray();
         foreach (Registration registration in all)
             if (IsLoader(registration.Target.Module))
                 throw new NotSupportedException("Harmony patch on loader module: " + Describe(registration));
@@ -109,35 +126,28 @@ internal static class KnownLoaderPatches
         if (loaderModules.Length != 1) throw new NotSupportedException("Multiple loader assembly instances are unsupported");
         Module module = loaderModules[0];
         Proof proof = GetProof(module);
-        Registration[] expected = proof.Copy();
+        ReadOnlySpan<Registration> expected = proof.Allowed;
         var seen = new bool[expected.Length];
+        var indices = new int[expected.Length];
         foreach (Registration registration in all)
         {
             if (registration.Owner != LoaderOwner && !IsLoader(registration.Hook.Module)) continue;
-            int index = Array.FindIndex(expected, candidate => Match(candidate, registration));
+            int index = -1;
+            for (int i = 0; i < expected.Length; i++) if (Match(expected[i], registration)) { index = i; break; }
             if (index < 0) throw new NotSupportedException("Unexpected loader patch/module instance: " + Describe(registration));
+            if (!DefaultMetadata(registration)) throw new NotSupportedException("Loader descriptor metadata changed: " + Describe(registration));
             if (seen[index]) throw new NotSupportedException("Duplicate loader patch: " + Describe(registration));
             seen[index] = true;
+            indices[index] = registration.Index;
         }
         int missing = Array.IndexOf(seen, false);
         if (missing >= 0) throw new NotSupportedException("Incomplete loader patch inventory: " + Describe(expected[missing]));
+        proof.ValidateIndices(indices);
         return proof;
     }
     internal static Registration[] RuntimeRegistrations()
     {
-        var all = new List<Registration>();
-        foreach (MethodBase target in Harmony.GetAllPatchedMethods())
-        {
-            Patches? patches = Harmony.GetPatchInfo(target);
-            if (patches == null) throw new NotSupportedException("Harmony patch inventory changed during compatibility check");
-            void Add(IEnumerable<Patch> hooks, Kind kind)
-            {
-                foreach (Patch patch in hooks) all.Add(new(target, patch.owner, kind, patch.PatchMethod));
-            }
-            Add(patches.Prefixes, Kind.Prefix); Add(patches.Postfixes, Kind.Postfix); Add(patches.Transpilers, Kind.Transpiler);
-            Add(patches.Finalizers, Kind.Finalizer); Add(patches.InnerPrefixes, Kind.InnerPrefix); Add(patches.InnerPostfixes, Kind.InnerPostfix);
-        }
-        return all.ToArray();
+        return HarmonyPatchIdentity.ReadRuntimeView().Registrations;
     }
     internal static Module[] RuntimeLoaderModules() => AppDomain.CurrentDomain.GetAssemblies()
         .Where(assembly => assembly.GetName().Name == "ModLoader").Select(assembly => assembly.ManifestModule).ToArray();

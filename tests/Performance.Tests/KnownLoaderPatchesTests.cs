@@ -3,7 +3,9 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Runtime.Loader;
+using System.Threading;
 using Xunit;
 
 namespace Performance.Tests;
@@ -40,10 +42,16 @@ public sealed class KnownLoaderPatchesTests
     [InlineData("method")]
     [InlineData("helper-detour")]
     [InlineData("generated-detour")]
+    [InlineData("priority")]
+    [InlineData("before")]
+    [InlineData("after")]
+    [InlineData("debug")]
+    [InlineData("index")]
     public void EveryUnprovenInventoryIsRejected(string change)
     {
         Module module = Loader().ManifestModule;
         var expected = KnownLoaderPatches.Expected(module);
+        KnownLoaderPatches.Validate(expected, [module]);
         var altered = expected.ToList();
         switch (change)
         {
@@ -54,6 +62,11 @@ public sealed class KnownLoaderPatchesTests
             case "owner": altered[0] = altered[0] with { Owner = "spoofed-owner" }; break;
             case "kind": altered[0] = altered[0] with { HookKind = KnownLoaderPatches.Kind.Prefix }; break;
             case "method": altered[0] = altered[0] with { Hook = Patch() }; break;
+            case "priority": altered[0] = altered[0] with { Priority = 401 }; break;
+            case "before": altered[0] = altered[0] with { Before = ["changed"] }; break;
+            case "after": altered[0] = altered[0] with { After = ["changed"] }; break;
+            case "debug": altered[0] = altered[0] with { Debug = true }; break;
+            case "index": altered[0] = altered[0] with { Index = 1 }; break;
             case "helper-detour": altered.Add(new(module.ResolveMethod(0x0600000A)!, "arbitrary-owner", KnownLoaderPatches.Kind.Prefix, Patch())); break;
             case "generated-detour":
                 MethodInfo generated = module.Assembly.GetTypes().Where(t => t.DeclaringType != null)
@@ -75,6 +88,8 @@ public sealed class KnownLoaderPatchesTests
         string directory = Path.Combine(Path.GetTempPath(), "Performance-loader-proof-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         string copy = Path.Combine(directory, "ModLoader.dll");
+        Exception? proofFailure = null;
+        Exception? cleanupFailure = null;
         try
         {
             File.Copy(LoaderPath, copy);
@@ -87,7 +102,29 @@ public sealed class KnownLoaderPatchesTests
             for (int i = 0; i < 10 && unloaded.IsAlive; i++) { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); }
             Assert.False(unloaded.IsAlive);
         }
-        finally { File.Delete(copy); Directory.Delete(directory); }
+        catch (Exception error) { proofFailure = error; }
+        finally
+        {
+            try { DeleteCollectibleCopy(copy); Directory.Delete(directory); }
+            catch (Exception cleanup) { cleanupFailure = cleanup; }
+        }
+        if (proofFailure != null && cleanupFailure != null)
+            throw new AggregateException("Loader proof and cleanup failed", proofFailure, cleanupFailure);
+        if (proofFailure != null) ExceptionDispatchInfo.Capture(proofFailure).Throw();
+        if (cleanupFailure != null) ExceptionDispatchInfo.Capture(cleanupFailure).Throw();
+    }
+    private static void DeleteCollectibleCopy(string path)
+    {
+        // Windows PE mapping release may lag the collectible ALC's weak-reference transition.
+        // Retry only this test-owned file; a permanent failure still throws and never hides the proof assertion.
+        for (int attempt = 0; ; attempt++)
+        {
+            try { File.Delete(path); return; }
+            catch (Exception error) when (attempt < 9 && error is IOException or UnauthorizedAccessException)
+            {
+                GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); Thread.Sleep(10);
+            }
+        }
     }
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static WeakReference RejectCollectibleCopy(string path, Module original, KnownLoaderPatches.Registration[] expected, bool changedHash)

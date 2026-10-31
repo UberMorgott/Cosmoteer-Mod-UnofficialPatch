@@ -42,6 +42,9 @@ internal static class BeamTargetMemo
     private static WeakReference<SimRoot>? _owner;
     private static int _thread;
     private static Definition[]? _definitions;
+    private static RequiredHook[]? _requiredHooks;
+    private static KnownLoaderPatches.Registration[]? _installedHooks;
+    private readonly record struct RequiredHook(MethodBase Target, KnownLoaderPatches.Kind Kind, MethodInfo Method);
     private static readonly Guid GameMvid = new("fd7c0bba-64d3-40b4-a571-bf8b34eb4277");
     private static readonly Guid HalflingMvid = new("29d04acb-ae49-4f3b-8499-f03c9144a3a9");
     private static readonly MethodInfo Getter = AccessTools.Method(typeof(Emitter), "GetShipTarget");
@@ -126,7 +129,6 @@ internal static class BeamTargetMemo
                     if (!_definitions.Any(d => Same(d.Target, parent))) throw new NotSupportedException("Uncovered precompiled beam memo caller: " + parent);
                 if (!AtlasWriteCoverage.TryDisableInlining(definition.Target, out string? error)) throw new NotSupportedException(error);
             }
-            ValidateHooks();
             if (!Compatible(out string? compatibilityError)) throw new NotSupportedException(compatibilityError);
             _director = director; director.FrameStarting += OnFrameStarting;
             Volatile.Write(ref _ready, 1);
@@ -141,21 +143,41 @@ internal static class BeamTargetMemo
         if (Convert.ToHexString(SHA256.HashData(input)) != expected) throw new NotSupportedException("Beam memo native dependency file changed: " + assembly.GetName().Name);
     }
     private static bool Same(MethodBase a, MethodBase b) => a.Module == b.Module && a.MetadataToken == b.MetadataToken;
-    private static bool HasHook(IEnumerable<Patch> patches, Type type, string name) => patches.Any(p =>
-        p.owner == Patcher.HarmonyId && p.PatchMethod.DeclaringType == type && p.PatchMethod.Name == name);
-    private static void ValidateHooks()
+    private static RequiredHook[] ReadRequiredHooks()
     {
+        var result = new List<RequiredHook>();
         foreach (Definition d in _definitions ?? [])
         {
-            Patches? patches = Harmony.GetPatchInfo(d.Target);
-            if (patches == null || !HasHook(patches.Transpilers, d.Patch, "Transpiler")) throw new NotSupportedException("Beam memo transpiler coverage missing: " + d.Target);
-            foreach (string hook in new[] { "Prefix", "Finalizer" })
+            foreach (var hook in new[] { ("Transpiler", KnownLoaderPatches.Kind.Transpiler), ("Prefix", KnownLoaderPatches.Kind.Prefix), ("Finalizer", KnownLoaderPatches.Kind.Finalizer) })
             {
-                if (d.Patch.GetMethod(hook, BindingFlags.Public | BindingFlags.Static) == null) continue;
-                if (!HasHook(hook == "Prefix" ? patches.Prefixes : patches.Finalizers, d.Patch, hook))
-                    throw new NotSupportedException("Beam memo scope coverage missing: " + d.Target);
+                if (d.Patch.GetMethod(hook.Item1, BindingFlags.Public | BindingFlags.Static) is { } method) result.Add(new(d.Target, hook.Item2, method));
+                else if (hook.Item2 == KnownLoaderPatches.Kind.Transpiler) throw new NotSupportedException("Beam memo transpiler definition missing: " + d.Target);
             }
         }
+        return result.ToArray();
+    }
+    private static void ValidateHooks(KnownLoaderPatches.Registration[] registrations)
+    {
+        RequiredHook[] required = _requiredHooks ??= ReadRequiredHooks();
+        KnownLoaderPatches.Registration[]? initial = _installedHooks == null ? new KnownLoaderPatches.Registration[required.Length] : null;
+        for (int i = 0; i < required.Length; i++)
+        {
+            RequiredHook wanted = required[i];
+            KnownLoaderPatches.Registration found = default; int count = 0;
+            foreach (var registration in registrations)
+                if (Same(registration.Target, wanted.Target) && registration.Owner == Patcher.HarmonyId && registration.HookKind == wanted.Kind && registration.Hook.Equals(wanted.Method))
+                { found = registration; count++; }
+            if (count != 1) throw new NotSupportedException("Beam memo hook coverage missing/duplicate: " + wanted.Target);
+            if (initial != null) initial[i] = found with { Before = found.Before == null ? null : (string[])found.Before.Clone(), After = found.After == null ? null : (string[])found.After.Clone() };
+            else
+            {
+                var installed = _installedHooks![i];
+                if (installed.Index != found.Index || installed.Priority != found.Priority || installed.Debug != found.Debug || installed.InnerMethod != found.InnerMethod ||
+                    !(installed.Before ?? []).AsSpan().SequenceEqual(found.Before ?? []) || !(installed.After ?? []).AsSpan().SequenceEqual(found.After ?? []))
+                    throw new NotSupportedException("Beam memo installed hook ordering changed: " + wanted.Target);
+            }
+        }
+        if (initial != null) _installedHooks = initial;
     }
     // The exact complete loader inventory is the only foreign exception. Shared generic definitions in all protected
     // modules retain the existing conservative guard; no generic engine method is detoured here.
@@ -163,8 +185,10 @@ internal static class BeamTargetMemo
     {
         try
         {
-            var registrations = KnownLoaderPatches.RuntimeRegistrations();
-            var loader = KnownLoaderPatches.Validate(registrations, KnownLoaderPatches.RuntimeLoaderModules());
+            var view = HarmonyPatchIdentity.ReadRuntimeView();
+            var registrations = view.Registrations;
+            ValidateHooks(registrations);
+            var loader = KnownLoaderPatches.Validate(registrations, view.LoaderModules);
             foreach (var registration in registrations)
             {
                 Module module = registration.Target.Module;
@@ -181,7 +205,7 @@ internal static class BeamTargetMemo
     internal static void CheckCompatibility()
     {
         if (!Ready) return;
-        try { ValidateHooks(); if (!Compatible(out string? error)) Reject(error ?? "Beam target memo compatibility unavailable"); }
+        try { if (!Compatible(out string? error)) Reject(error ?? "Beam target memo compatibility unavailable"); }
         catch (Exception ex) { Reject(ex.Message); }
     }
     private static void OnFrameStarting(object? sender, EventArgs e) => CheckCompatibility();

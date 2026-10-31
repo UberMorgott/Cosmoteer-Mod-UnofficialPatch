@@ -92,6 +92,8 @@ public sealed class BeamTargetMemoTests
     [InlineData("missing")]
     [InlineData("secondary")]
     [InlineData("verify-secondary")]
+    [InlineData("removed")]
+    [InlineData("late-foreign")]
     public async Task IsolatedNativeCases(string scenario)
     {
         string? childCase = Environment.GetEnvironmentVariable("BEAM_MEMO_TEST_CASE");
@@ -154,6 +156,16 @@ public sealed class BeamTargetMemoTests
             using var f = new Setup();
             Assert.True(BeamTargetMemo.BindOwnedSimulation(f.Sim));
             NativeConfirmedTargetsAndProhibition(f);
+            if (scenario == "removed")
+            {
+                own.Unpatch(definitions[0].Target, HarmonyPatchType.Prefix, own.Id);
+                BeamTargetMemo.CheckCompatibility(); Assert.False(BeamTargetMemo.Ready); Assert.Contains("coverage", BeamTargetMemo.FailureReason); return;
+            }
+            if (scenario == "late-foreign")
+            {
+                foreign.Patch(AccessTools.Method(typeof(Weapon), "GetShipTarget"), prefix: new HarmonyMethod(typeof(BeamTargetMemoTests), nameof(ForeignPrefix)));
+                BeamTargetMemo.CheckCompatibility(); Assert.False(BeamTargetMemo.Ready); Assert.Contains("Foreign patch", BeamTargetMemo.FailureReason); return;
+            }
             if (scenario is "secondary" or "verify-secondary") { NativeSecondaryFilter(f); return; }
             if (scenario == "verify") { VerifyMismatch(f); return; }
             if (scenario == "verify-reentry") { VerifyReentry(f); return; }
