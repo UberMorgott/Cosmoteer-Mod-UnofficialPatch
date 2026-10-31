@@ -33,6 +33,7 @@ Mark entries not yet released as (unreleased).
 
 ## Experimental (off unless you turn it on)
 
+- Secondary beam raycasts repeatedly validated the same weapon target. A benchmark-only experiment reuses a target within a guarded native query and falls back to native calls when state or callbacks are unsupported. Disabled by default; correctness and game performance validation are incomplete. (unreleased)
 - Raycast helpers retained their last callback and hit data, could return old payload after a miss, and overwrote temporary results during nested queries. An opt-in experiment clears scratch state on success or failure and preserves active outer helper state. Same-world reentrancy remains unsupported because native traversal stacks are shared. Game memory and performance validation are incomplete. (unreleased)
 - Empty wrecks were checked increasingly rarely in large battles. An experimental benchmark-only switch keeps cleanup checks on a fixed cycle while preserving rebuild plans and other native protections. Off by default; game performance validation is incomplete. (unreleased)
 - Idle-worker experiment: the game busy-spins while pool threads have no tasks. An opt-in guarded path waits for a work notification after a short spin, preserving native task execution, completion waits and worker priorities. Disabled by default while frame-time and simulation-speed validation are incomplete. (unreleased)

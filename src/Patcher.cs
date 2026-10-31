@@ -36,6 +36,7 @@ internal static class Patcher
         .. ParallelIdleParking.Patches,
         .. CullCadence.Patches,
         .. RaycastScratch.Patches,
+        .. BeamTargetMemo.Patches,
         (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
         (MapNodeText.Target, typeof(MapNodeText)),
         (MusicSeek.Target, typeof(MusicSeek)),
@@ -77,6 +78,7 @@ internal static class Patcher
             if (ParallelIdleParking.Requested) _ = ParallelIdleParking.Initialize();
             if (CullCadence.Requested) _ = CullCadence.Initialize();
             if (RaycastScratch.Requested) _ = RaycastScratch.Initialize();
+            if (BeamTargetMemo.Requested) _ = BeamTargetMemo.Initialize();
             Log.Info($"Patched {patches.Count} methods + {inlinerCount} R2R inliners in {sw.ElapsedMilliseconds} ms");
             return true;
         }
@@ -96,6 +98,7 @@ internal static class Patcher
     internal static void RollBack(Action unpatchAll)
     {
         BlueprintToggleEvaluation.EndValidatedUpdate();
+        BeamTargetMemo.Disable();
         RaycastScratch.Disable();
         CullCadence.Disable();
         ParallelIdleParking.Disable();
