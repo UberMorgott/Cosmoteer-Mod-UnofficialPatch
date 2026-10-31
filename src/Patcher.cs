@@ -43,7 +43,6 @@ internal static class Patcher
         (MusicSeek.Target, typeof(MusicSeek)),
         (MiniviewParticleBoxing.Target, typeof(MiniviewParticleBoxing)),
         .. ShaderConstantBoxing.Targets.Select(t => ((MethodBase)t, typeof(ShaderConstantBoxing))),
-        .. BeforeDrawUnsubscribe.Targets.Select(t => ((MethodBase)t, typeof(BeforeDrawUnsubscribe))),
         (RoofOpacity.Target, typeof(RoofOpacity)),
         (MultiColorMax.Target, typeof(MultiColorMax)),
         (PlayerMoney.Target, typeof(PlayerMoney)),
