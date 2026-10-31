@@ -22,6 +22,10 @@ internal static class AtlasPartialUploads
     private static readonly string? RequestedMode = Environment.GetEnvironmentVariable("PERFORMANCE_ATLAS_STATIC");
     internal static readonly bool Requested = IsRequested(RequestedMode);
     private static readonly bool SingleRange = RequestedMode == "3";
+    internal static readonly bool DedicatedLockRequested = AtlasOwnerGate.Select(RequestedMode, Environment.GetEnvironmentVariable("PERFORMANCE_ATLAS_LOCK"));
+    private static long _dedicatedLockOwners, _monitorLockOwners;
+    internal static long DedicatedLockOwners => Interlocked.Read(ref _dedicatedLockOwners);
+    internal static long MonitorLockOwners => Interlocked.Read(ref _monitorLockOwners);
     internal static bool IsRequested(string? value) => value is "2" or "3";
     private static int _ready, _cleanupPending, _cleanupAll, _synchronizing;
     [ThreadStatic] private static int _heldGates;
@@ -236,17 +240,27 @@ internal static class AtlasPartialUploads
     private readonly struct GateLease : IDisposable
     {
         private readonly Owner _owner;
-        internal GateLease(Owner owner) { _owner = owner; Monitor.Enter(owner.Gate); _heldGates++; }
-        public void Dispose() { _heldGates--; Monitor.Exit(_owner.Gate); }
+        internal GateLease(Owner owner) { _owner = owner; owner.Gate.Enter(); _heldGates++; }
+        public void Dispose() { _heldGates--; _owner.Gate.Exit(); }
     }
 
-    internal sealed class Owner(AtlasQuadManager manager)
+    internal sealed class Owner
     {
-        internal readonly WeakReference<AtlasQuadManager> Manager = new(manager);
-        internal readonly object Gate = new();
+        internal readonly WeakReference<AtlasQuadManager> Manager;
+        internal readonly AtlasOwnerGate Gate;
         internal long Generation;
         internal int Depth, DrawDepth, DrawThread;
         internal bool Retired;
+        internal Owner(AtlasQuadManager manager) : this(manager, DedicatedLockRequested) { }
+        internal Owner(AtlasQuadManager manager, bool dedicated)
+        {
+            Manager = new(manager); Gate = new(dedicated);
+            if (dedicated)
+            {
+                if (Interlocked.Increment(ref _dedicatedLockOwners) == 1) Log.Info("Atlas owner synchronization active: System.Threading.Lock (immutable owner backend)");
+            }
+            else Interlocked.Increment(ref _monitorLockOwners);
+        }
     }
 
     internal sealed class UploadState(Owner owner, GraphicsArray<AtlasQuad> array, int capacity)
@@ -373,7 +387,7 @@ internal static class AtlasPartialUploads
         if (Ready) Volatile.Write(ref _synchronizing, 1);
         Owner owner = OwnerOf(manager);
         // Synchronization survives Ready=false: a new writer must not bypass an already-running draw.
-        Monitor.Enter(owner.Gate);
+        owner.Gate.Enter();
         _heldGates++;
         if (kind == ScopeKind.Draw)
         {
@@ -403,7 +417,7 @@ internal static class AtlasPartialUploads
             else if (mutation.Kind == ScopeKind.Draw && --mutation.Owner.DrawDepth == 0) mutation.Owner.DrawThread = 0;
         }
         catch (Exception ex) { Stop(ex.Message); }
-        finally { _heldGates--; Monitor.Exit(mutation.Owner.Gate); }
+        finally { _heldGates--; mutation.Owner.Gate.Exit(); }
         return error;
     }
 
@@ -425,7 +439,7 @@ internal static class AtlasPartialUploads
             if (_native == null || _context == null || !_context.TryGetTarget(out DeviceContext? expected) || !ReferenceEquals(context, expected) ||
                 context.NativePointer == IntPtr.Zero || context.TypeInfo != DeviceContextType.Immediate ||
                 resource is not Buffer buffer || !Buffers.TryGetValue(buffer, out UploadState? state)) return false;
-            if (!Monitor.IsEntered(state.Owner.Gate) || state.Owner.DrawDepth <= 0 || state.Owner.DrawThread != _thread) return false;
+            if (!state.Owner.Gate.IsHeldByCurrentThread || state.Owner.DrawDepth <= 0 || state.Owner.DrawThread != _thread) return false;
             if (state.Owner.Retired ||
                 !state.Owner.Manager.TryGetTarget(out _) || !state.Array.TryGetTarget(out GraphicsArray<AtlasQuad>? array) || _native.Disposed(array)) return false;
             if (!ReferenceEquals(_native.Buffer(array), buffer) || buffer.NativePointer == IntPtr.Zero || !ReferenceEquals(_native.Context(array), context) ||

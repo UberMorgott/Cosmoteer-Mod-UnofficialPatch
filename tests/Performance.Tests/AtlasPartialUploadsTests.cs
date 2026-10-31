@@ -125,10 +125,12 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         return value;
     }
 
-    [Fact]
-    public void ForeignDependencyAtFrameBoundaryDisablesAndRestoresPendingNativeDirty()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ForeignDependencyAtFrameBoundaryDisablesAndRestoresPendingNativeDirty(bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad quad = fixture.Manager.CreateQuad(default, 0);
         var state = AtlasPartialUploads.StateOf(fixture.Array)!;
         Assert.True(state.Begin().Finish(true));
@@ -143,10 +145,12 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         Assert.NotNull(AtlasPartialUploads.FailureReason);
     }
 
-    [Fact]
-    public void OffThreadUploadRejectionOnlyDisarmsUntilGraphicsBoundary()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OffThreadUploadRejectionOnlyDisarmsUntilGraphicsBoundary(bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad quad = fixture.Manager.CreateQuad(default, 0);
         var state = AtlasPartialUploads.StateOf(fixture.Array)!;
         Assert.True(state.Begin().Finish(true));
@@ -176,11 +180,13 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         Assert.False(attempt.Finish(true));
     }
 
-    [Fact]
-    public void PhysicsWorkersCanCreateAndWriteIndependentOwners()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PhysicsWorkersCanCreateAndWriteIndependentOwners(bool dedicated)
     {
-        using var first = new NativeFixture();
-        using var second = new NativeFixture();
+        using var first = new NativeFixture(dedicated);
+        using var second = new NativeFixture(dedicated);
         using var start = new ManualResetEventSlim();
         Exception? firstError = null, secondError = null;
         Thread Make(NativeFixture fixture, Action<Exception> fail) => new(() =>
@@ -206,14 +212,18 @@ public sealed class AtlasPartialUploadsTests : IDisposable
     }
 
     [Theory]
-    [InlineData(0, false)]
-    [InlineData(1, false)]
-    [InlineData(0, true)]
-    [InlineData(1, true)]
+    [InlineData(0, false, false)]
+    [InlineData(0, false, true)]
+    [InlineData(1, false, false)]
+    [InlineData(1, false, true)]
+    [InlineData(0, true, false)]
+    [InlineData(0, true, true)]
+    [InlineData(1, true, false)]
+    [InlineData(1, true, true)]
     [SuppressMessage("ReSharper", "AccessToDisposedClosure", Justification = "The synchronous draw callback is cleared and every started worker is joined before the captured fixtures/events leave their using scopes.")]
-    public void WriterWaitsThroughNativeDrawAndDirtyClearEvenAfterShutdown(int drawIndex, bool shutdown)
+    public void WriterWaitsThroughNativeDrawAndDirtyClearEvenAfterShutdown(int drawIndex, bool shutdown, bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad quad = fixture.Manager.CreateQuad(default, 0);
         using var requested = new ManualResetEventSlim();
         using var finished = new ManualResetEventSlim();
@@ -250,12 +260,43 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         if (!thread.ThreadState.HasFlag(ThreadState.Unstarted)) Assert.True(thread.Join(5000));
     }
 
-    [Fact]
-    [SuppressMessage("ReSharper", "AccessToDisposedClosure", Justification = "Worker execution is synchronous and joined inside the callback; the callback is cleared before fixtures are disposed.")]
-    public void DrawExceptionReleasesGateAndOtherOwnerNeverWaitsForIt()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [SuppressMessage("ReSharper", "AccessToDisposedClosure", Justification = "The owner gate is released and the started worker is joined in finally before the native fixture is disposed.")]
+    public void InterruptedNativeWriterDoesNotLeakHeldGateCount(bool dedicated)
     {
-        using var first = new NativeFixture();
-        using var second = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
+        ManagedAtlasQuad quad = fixture.Manager.CreateQuad(default, 0);
+        AtlasOwnerGate gate = AtlasPartialUploads.StateOf(fixture.Array)!.Owner.Gate;
+        Exception? failure = null; int heldAfter = -1;
+        var writer = new Thread(() =>
+        {
+            try { quad.Data = Quad(99); }
+            catch (Exception error) { failure = error; }
+            finally { heldAfter = (int)AccessTools.Field(typeof(AtlasPartialUploads), "_heldGates").GetValue(null)!; }
+        });
+        gate.Enter();
+        try
+        {
+            writer.Start();
+            Assert.True(SpinWait.SpinUntil(() => writer.ThreadState.HasFlag(ThreadState.WaitSleepJoin), 5000));
+            writer.Interrupt(); Assert.True(writer.Join(5000));
+            Assert.IsType<ThreadInterruptedException>(failure); Assert.Equal(0, heldAfter);
+            Assert.True(gate.IsHeldByCurrentThread);
+        }
+        finally { gate.Exit(); JoinStarted(writer); }
+        Assert.Equal(default, fixture.Array[0].V1.Location);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [SuppressMessage("ReSharper", "AccessToDisposedClosure", Justification = "Worker execution is synchronous and joined inside the callback; the callback is cleared before fixtures are disposed.")]
+    public void DrawExceptionReleasesGateAndOtherOwnerNeverWaitsForIt(bool dedicated)
+    {
+        using var first = new NativeFixture(dedicated);
+        using var second = new NativeFixture(dedicated);
         MethodInfo draw = AtlasWriteCoverage.DrawTargets[0].Target;
         _drawExit = _ =>
         {
@@ -272,10 +313,12 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         Assert.Equal(1, first.Manager.Count); Assert.Equal(1, second.Manager.Count);
     }
 
-    [Fact]
-    public void NativeSetterExceptionReleasesItsOwnerGate()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NativeSetterExceptionReleasesItsOwnerGate(bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad quad = fixture.Manager.CreateQuad(default, 0);
         FieldInfo index = AccessTools.Field(AtlasWriteCoverage.InternalQuadType, "_index");
         index.SetValue(quad, 1000);
@@ -288,14 +331,16 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         Assert.Equal(Quad(9).V1.Location, fixture.Array[0].V1.Location);
     }
 
-    [Fact]
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     [SuppressMessage("ReSharper", "AccessToDisposedClosure", Justification = "The held test gate is released and both started workers are joined in finally before captured fixtures are disposed.")]
-    public void RegistryLockIsReleasedBeforeSnapshotWaitsForAnOwner()
+    public void RegistryLockIsReleasedBeforeSnapshotWaitsForAnOwner(bool dedicated)
     {
-        using var first = new NativeFixture();
-        using var second = new NativeFixture();
+        using var first = new NativeFixture(dedicated);
+        using var second = new NativeFixture(dedicated);
         first.Manager.CreateQuad(default, 0);
-        object gate = AtlasPartialUploads.StateOf(first.Array)!.Owner.Gate;
+        AtlasOwnerGate gate = AtlasPartialUploads.StateOf(first.Array)!.Owner.Gate;
         Exception? recoveryError = null, createError = null;
         var recovery = new Thread(() =>
         {
@@ -303,7 +348,7 @@ public sealed class AtlasPartialUploadsTests : IDisposable
             catch (Exception ex) { recoveryError = ex; }
         });
         var create = new Thread(() => { try { second.Manager.CreateQuad(default, 0); } catch (Exception ex) { createError = ex; } });
-        Monitor.Enter(gate);
+        gate.Enter();
         try
         {
             recovery.Start();
@@ -311,20 +356,24 @@ public sealed class AtlasPartialUploadsTests : IDisposable
             create.Start();
             Assert.True(create.Join(5000)); // Registration must progress while snapshot is waiting for the other owner.
         }
-        finally { Monitor.Exit(gate); JoinStarted(create); JoinStarted(recovery); }
+        finally { gate.Exit(); JoinStarted(create); JoinStarted(recovery); }
         Assert.True(recovery.Join(5000));
         Assert.Null(recoveryError); Assert.Null(createError);
     }
 
     [Theory]
-    [InlineData(0, false)]
-    [InlineData(1, false)]
-    [InlineData(0, true)]
-    [InlineData(1, true)]
+    [InlineData(0, false, false)]
+    [InlineData(0, false, true)]
+    [InlineData(1, false, false)]
+    [InlineData(1, false, true)]
+    [InlineData(0, true, false)]
+    [InlineData(0, true, true)]
+    [InlineData(1, true, false)]
+    [InlineData(1, true, true)]
     [SuppressMessage("ReSharper", "AccessToDisposedClosure", Justification = "The draw gate is released and every started worker is joined in finally before the captured native fixture is disposed.")]
-    public void WorkerDrawFailsBeforeWaitingForOwnerEvenAfterShutdown(int drawIndex, bool shutdown)
+    public void WorkerDrawFailsBeforeWaitingForOwnerEvenAfterShutdown(int drawIndex, bool shutdown, bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         fixture.Manager.CreateQuad(default, 0);
         AtlasPartialUploads.DrawHook.Prefix(fixture.Manager, out AtlasPartialUploads.Mutation scope);
         Exception? error = null;
@@ -350,10 +399,12 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         }
     }
 
-    [Fact]
-    public void SuccessfulKnownUploadCountersIncludeFullPartialAndRetryBytesOnce()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SuccessfulKnownUploadCountersIncludeFullPartialAndRetryBytesOnce(bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad quad = fixture.Manager.CreateQuad(default, 0);
         var state = AtlasPartialUploads.StateOf(fixture.Array)!;
         long full = AtlasPartialUploads.FullUploads, partial = AtlasPartialUploads.PartialUploads;
@@ -382,10 +433,12 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         Assert.Equal(calls + 4, AtlasPartialUploads.UploadCalls);
     }
 
-    [Fact]
-    public void CoalescedNativeWritesMirrorOneSpanIncludingUnchangedGap()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CoalescedNativeWritesMirrorOneSpanIncludingUnchangedGap(bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad[] quads = Enumerable.Range(0, 8).Select(i => fixture.Manager.CreateQuad(Quad(i + 1), 0)).ToArray();
         var state = AtlasPartialUploads.StateOf(fixture.Array)!;
         byte[] gpu = new byte[fixture.ByteCount];
@@ -404,10 +457,12 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         AssertMirror(fixture, gpu);
     }
 
-    [Fact]
-    public void MultiRegionRetryRetainsEveryUnderlyingCallWithoutWrapperDoubleCount()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MultiRegionRetryRetainsEveryUnderlyingCallWithoutWrapperDoubleCount(bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad first = fixture.Manager.CreateQuad(default, 0);
         fixture.Manager.CreateQuad(default, 0);
         ManagedAtlasQuad last = fixture.Manager.CreateQuad(default, 0);
@@ -427,11 +482,13 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         Assert.Equal(uploaded + fixture.ByteCount + 2L * Unsafe.SizeOf<AtlasQuad>(), AtlasPartialUploads.UploadedBytes);
     }
 
-    [Fact]
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     [SuppressMessage("ReSharper", "AccessToDisposedClosure", Justification = "Both nested draw invocations are synchronous and the callback is cleared in finally before its native fixture is disposed.")]
-    public void ReentrantDrawAndNativeSetterPreserveOwnerScope()
+    public void ReentrantDrawAndNativeSetterPreserveOwnerScope(bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad quad = fixture.Manager.CreateQuad(default, 0);
         MethodInfo draw = AtlasWriteCoverage.DrawTargets[0].Target;
         int callbacks = 0;
@@ -452,11 +509,13 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         finally { _drawExit = null; }
     }
 
-    [Fact]
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     [SuppressMessage("ReSharper", "AccessToDisposedClosure", Justification = "The start event stays alive until the started worker is joined in finally, before fixtures and the event are disposed.")]
-    public void RegistrySnapshotAndCleanupDoNotHoldGlobalLockWhileWaitingForOwners()
+    public void RegistrySnapshotAndCleanupDoNotHoldGlobalLockWhileWaitingForOwners(bool dedicated)
     {
-        NativeFixture[] fixtures = Enumerable.Range(0, 16).Select(_ => new NativeFixture()).ToArray();
+        NativeFixture[] fixtures = Enumerable.Range(0, 16).Select(_ => new NativeFixture(dedicated)).ToArray();
         using var start = new ManualResetEventSlim();
         Exception? error = null;
         var worker = new Thread(() =>
@@ -480,10 +539,12 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         }
     }
 
-    [Fact]
-    public void ActualNativeMutationsAndPlansMirrorEveryCapacityByte()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ActualNativeMutationsAndPlansMirrorEveryCapacityByte(bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad first = fixture.Manager.CreateQuad(Quad(1), 0);
         fixture.Manager.CreateQuad(Quad(2), 0);
         ManagedAtlasQuad last = fixture.Manager.CreateQuad(Quad(3), 0);
@@ -502,10 +563,12 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         Apply(fixture, state, gpu, expectedFull: true);
     }
 
-    [Fact]
-    public void FailedNestedAndOverlappingUploadsStayFullAndRecoverNativeDirtyFlag()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FailedNestedAndOverlappingUploadsStayFullAndRecoverNativeDirtyFlag(bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad quad = fixture.Manager.CreateQuad(Quad(1), 0);
         var state = AtlasPartialUploads.StateOf(fixture.Array)!;
         byte[] gpu = new byte[fixture.ByteCount];
@@ -535,11 +598,13 @@ public sealed class AtlasPartialUploadsTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void InvalidatedPartialGetsCompleteFullMirrorBeforeNextFrame(bool structural)
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void InvalidatedPartialGetsCompleteFullMirrorBeforeNextFrame(bool structural, bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad first = fixture.Manager.CreateQuad(Quad(1), 0);
         fixture.Manager.CreateQuad(Quad(2), 0);
         ManagedAtlasQuad last = fixture.Manager.CreateQuad(Quad(3), 0);
@@ -565,11 +630,13 @@ public sealed class AtlasPartialUploadsTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ChangedBindingOrShutdownAbortsSuppressedUpload(bool shutdown)
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void ChangedBindingOrShutdownAbortsSuppressedUpload(bool shutdown, bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad quad = fixture.Manager.CreateQuad(default, 0);
         var state = AtlasPartialUploads.StateOf(fixture.Array)!;
         Assert.True(state.Begin().Finish(true));
@@ -583,10 +650,12 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         Assert.True(state.Dirty.RequiresFullUpload);
     }
 
-    [Fact]
-    public void SuppressedUploadCannotReportSuccessAfterCommitInvalidation()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SuppressedUploadCannotReportSuccessAfterCommitInvalidation(bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad quad = fixture.Manager.CreateQuad(default, 0);
         var state = AtlasPartialUploads.StateOf(fixture.Array)!;
         Assert.True(state.Begin().Finish(true));
@@ -601,10 +670,12 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         Assert.Same(original, AtlasPartialUploads.UploadHook.Finalizer(original, attempt));
     }
 
-    [Fact]
-    public void WarmTrackedWritesAndPlanTransactionsAllocateNothing()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WarmTrackedWritesAndPlanTransactionsAllocateNothing(bool dedicated)
     {
-        using var fixture = new NativeFixture();
+        using var fixture = new NativeFixture(dedicated);
         ManagedAtlasQuad quad = fixture.Manager.CreateQuad(default, 0);
         var state = AtlasPartialUploads.StateOf(fixture.Array)!;
         Assert.True(state.Begin().Finish(true));
@@ -679,8 +750,10 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         private readonly FieldInfo _dirty;
         internal bool IsDirty => (bool)_dirty.GetValue(Array)!;
 
-        internal unsafe NativeFixture()
+        internal unsafe NativeFixture(bool dedicated = false)
         {
+            var owners = (ConditionalWeakTable<AtlasQuadManager, AtlasPartialUploads.Owner>)AccessTools.Field(typeof(AtlasPartialUploads), "Owners").GetValue(null)!;
+            owners.Add(Manager, new AtlasPartialUploads.Owner(Manager, dedicated));
             Assembly backend = Assembly.LoadFrom(System.IO.Path.Combine(GameAssemblies.GameBin, "HalflingPlatformWDX.dll"));
             Type type = backend.GetType("Halfling.Graphics.D3D11.D3D11StaticGraphicsArray`1", true)!.MakeGenericType(typeof(AtlasQuad));
             Array = (GraphicsArray<AtlasQuad>)NativeShell(type);
