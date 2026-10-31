@@ -56,6 +56,14 @@ internal static class KnownLoaderPatches
         }
     }
     internal static Registration[] Expected(Module module) => GetProof(module).Copy();
+    private static Module[] NativeModules() => [typeof(BeamEmitter).Module, typeof(World).Module, typeof(Environment).Module];
+
+    /// <summary>Native methods the pinned loader patches (resolution only, no hash proof): its owner is foreign to dependency checks.</summary>
+    internal static MethodBase[] NativeTargets()
+    {
+        Module[] native = NativeModules();
+        return Specs.Select(spec => native[spec.Module].ResolveMethod(spec.Target) ?? throw new NotSupportedException("Loader target missing")).ToArray();
+    }
     private static Proof GetProof(Module module) => Proofs.GetValue(module, key => new Lazy<Proof>(() => ReadProof(key), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
     private static Proof ReadProof(Module module)
     {
@@ -65,7 +73,7 @@ internal static class KnownLoaderPatches
         if (string.IsNullOrEmpty(location)) throw new NotSupportedException("Loader SHA256 requires the actual file-backed assembly instance");
         using (FileStream file = File.OpenRead(location))
             if (Convert.ToHexString(SHA256.HashData(file)) != LoaderHash) throw new NotSupportedException("Loader SHA256 mismatch");
-        Module[] native = [typeof(BeamEmitter).Module, typeof(World).Module, typeof(Environment).Module];
+        Module[] native = NativeModules();
         if (native[0].ModuleVersionId != new Guid("fd7c0bba-64d3-40b4-a571-bf8b34eb4277") ||
             native[1].ModuleVersionId != new Guid("29d04acb-ae49-4f3b-8499-f03c9144a3a9") ||
             (native[2].ModuleVersionId != new Guid("77d2994f-32f8-4ff2-8313-7ebf44feba98") && native[2].ModuleVersionId != new Guid("47f87616-cc44-40db-91db-a39140060003")))
