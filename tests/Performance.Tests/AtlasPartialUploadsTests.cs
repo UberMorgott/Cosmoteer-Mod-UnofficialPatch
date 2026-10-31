@@ -38,6 +38,7 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         Assembly backend = Assembly.LoadFrom(System.IO.Path.Combine(GameAssemblies.GameBin, "HalflingPlatformWDX.dll"));
         AtlasPartialUploads.ConfigureBackend(backend);
         AccessTools.Field(typeof(AtlasPartialUploads), "_thread").SetValue(null, Environment.CurrentManagedThreadId);
+        AccessTools.Field(typeof(AtlasPartialUploads), "_synchronizing").SetValue(null, 1);
         AccessTools.Property(typeof(AtlasPartialUploads), "Ready").SetValue(null, true);
         foreach ((MethodBase target, Type patch) in AtlasPartialUploads.WriterPatches.Concat(AtlasPartialUploads.DrawPatches))
             _harmony.Patch(target,
@@ -51,6 +52,72 @@ public sealed class AtlasPartialUploadsTests : IDisposable
         AtlasPartialUploads.Disable();
         _harmony.UnpatchAll(HarmonyId);
         _drawExit = null;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UninitializedLatchAndNotReadyDoNotEnterAMutationScope(bool dedicated)
+    {
+        using var fixture = new NativeFixture(dedicated);
+        FieldInfo synchronizing = AccessTools.Field(typeof(AtlasPartialUploads), "_synchronizing");
+        PropertyInfo ready = AccessTools.Property(typeof(AtlasPartialUploads), "Ready");
+        int previousLatch = (int)synchronizing.GetValue(null)!;
+        bool previousReady = AtlasPartialUploads.Ready;
+        var owner = (AtlasPartialUploads.Owner)AccessTools.Method(typeof(AtlasPartialUploads), "OwnerOf").Invoke(null, [fixture.Manager])!;
+        long generation = owner.Generation;
+        try
+        {
+            ready.SetValue(null, false); synchronizing.SetValue(null, 0);
+            var mutation = (AtlasPartialUploads.Mutation)AccessTools.Method(typeof(AtlasPartialUploads), "BeginMutation")
+                .Invoke(null, [fixture.Manager, -1, false, AtlasPartialUploads.ScopeKind.Write])!;
+            Assert.Null(mutation.Owner); Assert.False(owner.Gate.IsHeldByCurrentThread);
+            Assert.Equal(generation, owner.Generation);
+            Assert.Equal(0, (int)AccessTools.Field(typeof(AtlasPartialUploads), "_heldGates").GetValue(null)!);
+        }
+        finally { synchronizing.SetValue(null, previousLatch); ready.SetValue(null, previousReady); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NewWriterAfterDisableStillWaitsForPublishedOwnerGate(bool dedicated)
+    {
+        using var fixture = new NativeFixture(dedicated);
+        ManagedAtlasQuad quad = fixture.Manager.CreateQuad(default, 0);
+        AtlasOwnerGate gate = AtlasPartialUploads.StateOf(fixture.Array)!.Owner.Gate;
+        FieldInfo synchronizing = AccessTools.Field(typeof(AtlasPartialUploads), "_synchronizing");
+        PropertyInfo ready = AccessTools.Property(typeof(AtlasPartialUploads), "Ready");
+        int previousLatch = (int)synchronizing.GetValue(null)!;
+        bool previousReady = AtlasPartialUploads.Ready;
+        uint changes = fixture.Manager.ChangeCount;
+        Exception? failure = null; int heldAfter = -1;
+        var writer = new Thread(() =>
+        {
+            try { quad.Data = Quad(42); }
+            catch (Exception error) { failure = error; }
+            finally { heldAfter = (int)AccessTools.Field(typeof(AtlasPartialUploads), "_heldGates").GetValue(null)!; }
+        });
+        gate.Enter();
+        try
+        {
+            Assert.Equal(1, previousLatch);
+            AtlasPartialUploads.Disable();
+            Assert.False(AtlasPartialUploads.Ready); Assert.Equal(1, (int)synchronizing.GetValue(null)!);
+            writer.Start();
+            Assert.True(SpinWait.SpinUntil(() => writer.ThreadState.HasFlag(ThreadState.WaitSleepJoin), 5000));
+            Assert.Equal(changes, fixture.Manager.ChangeCount);
+        }
+        finally
+        {
+            gate.Exit();
+            try { JoinStarted(writer); }
+            finally { synchronizing.SetValue(null, previousLatch); ready.SetValue(null, previousReady); }
+        }
+        Assert.Null(failure); Assert.Equal(0, heldAfter);
+        Assert.False(gate.IsHeldByCurrentThread);
+        Assert.Equal(changes + 1, fixture.Manager.ChangeCount);
+        Assert.Equal(Quad(42).V1.Location, fixture.Array[0].V1.Location);
     }
 
     [Theory]

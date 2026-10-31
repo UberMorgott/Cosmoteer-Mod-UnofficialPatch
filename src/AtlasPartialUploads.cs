@@ -450,7 +450,6 @@ internal static class AtlasPartialUploads
     private static Mutation BeginMutation(AtlasQuadManager? manager, int subIndex = -1, bool retire = false, ScopeKind kind = ScopeKind.Structural)
     {
         if (manager == null || (Volatile.Read(ref _synchronizing) == 0 && !Ready)) return default;
-        if (Ready) Volatile.Write(ref _synchronizing, 1);
         Owner owner = OwnerOf(manager);
         // Synchronization survives Ready=false: a new writer must not bypass an already-running draw.
         owner.Gate.Enter();
