@@ -27,6 +27,10 @@ internal static class AtlasPartialUploads
     internal static long DedicatedLockOwners => Interlocked.Read(ref _dedicatedLockOwners);
     internal static long MonitorLockOwners => Interlocked.Read(ref _monitorLockOwners);
     internal static bool WriteCensusRequested => AtlasWriteCensus.Requested;
+    internal static bool FieldCensusAvailable => AtlasWriteCensus.FieldCensusAvailable;
+    internal static long CensusColorOnlyWrites => AtlasWriteCensus.ColorOnly;
+    internal static long CensusColorAndOtherWrites => AtlasWriteCensus.ColorAndOther;
+    internal static long CensusOtherOnlyWrites => AtlasWriteCensus.OtherOnly;
     internal static long CensusWrites => AtlasWriteCensus.Writes;
     internal static long CensusIdenticalWrites => AtlasWriteCensus.Identical;
     internal static long CensusDifferentWrites => AtlasWriteCensus.Different;
@@ -404,7 +408,7 @@ internal static class AtlasPartialUploads
     {
         if (!AtlasWriteCensus.Requested) return;
         AtlasWriteCensus.Interval? interval = null;
-        bool? identical = null;
+        AtlasWriteCensus.Difference? difference = null;
         bool error = false;
         try
         {
@@ -435,7 +439,7 @@ internal static class AtlasPartialUploads
                             unsafe
                             {
                                 ref AtlasQuad current = ref Unsafe.AsRef<AtlasQuad>((void*)IntPtr.Add(source, native._index * Unsafe.SizeOf<AtlasQuad>()));
-                                identical = AtlasWriteCensus.SameBytes(in current, in value);
+                                difference = AtlasWriteCensus.Compare(in current, in value);
                             }
                         }
                     }
@@ -443,7 +447,7 @@ internal static class AtlasPartialUploads
             }
         }
         catch (Exception) { error = true; }
-        AtlasWriteCensus.Record(interval, identical, error);
+        AtlasWriteCensus.Record(interval, difference, error);
     }
     internal readonly record struct Mutation(Owner? Owner, int SubIndex, ScopeKind Kind);
 

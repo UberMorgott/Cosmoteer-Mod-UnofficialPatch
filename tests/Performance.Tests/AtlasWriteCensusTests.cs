@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Cosmoteer.Ships.Rendering;
@@ -27,23 +28,87 @@ public sealed class AtlasWriteCensusTests
     public void ComparisonPreservesSignedZeroAndNanPayloadBits()
     {
         AtlasQuad a = default, b = default;
-        Assert.True(AtlasWriteCensus.SameBytes(a, b));
+        Assert.Equal(AtlasWriteCensus.Difference.None, AtlasWriteCensus.Compare(a, b));
         b.V1.Location = new Vector3(BitConverter.Int32BitsToSingle(unchecked((int)0x80000000)), 0, 0);
-        Assert.False(AtlasWriteCensus.SameBytes(a, b));
+        Assert.Equal(AtlasWriteCensus.Difference.Other, AtlasWriteCensus.Compare(a, b));
         a.V1.Location = b.V1.Location = new Vector3(BitConverter.Int32BitsToSingle(0x7FC00001), 0, 0);
-        Assert.True(AtlasWriteCensus.SameBytes(a, b));
+        Assert.Equal(AtlasWriteCensus.Difference.None, AtlasWriteCensus.Compare(a, b));
         b.V1.Location = new Vector3(BitConverter.Int32BitsToSingle(0x7FC00002), 0, 0);
-        Assert.False(AtlasWriteCensus.SameBytes(a, b));
+        Assert.Equal(AtlasWriteCensus.Difference.Other, AtlasWriteCensus.Compare(a, b));
+    }
+    [Fact]
+    public void FieldComparisonCoversEveryByteOfAllFourVertices()
+    {
+        Assert.True(AtlasWriteCensus.FieldCensusAvailable);
+        AtlasQuad baseline = default;
+        Assert.Equal(AtlasWriteCensus.Difference.None, AtlasWriteCensus.Compare(baseline, baseline));
+        for (int offset = 0; offset < 464; offset++)
+        {
+            AtlasQuad changed = default;
+            Unsafe.Add(ref Unsafe.As<AtlasQuad, byte>(ref changed), offset) = 1;
+            var expected = offset % 116 is >= 40 and < 56 ? AtlasWriteCensus.Difference.Color : AtlasWriteCensus.Difference.Other;
+            Assert.Equal(expected, AtlasWriteCensus.Compare(baseline, changed));
+        }
+        AtlasQuad mixed = default;
+        Unsafe.Add(ref Unsafe.As<AtlasQuad, byte>(ref mixed), 40) = 1;
+        Unsafe.Add(ref Unsafe.As<AtlasQuad, byte>(ref mixed), 463) = 1;
+        Assert.Equal(AtlasWriteCensus.Difference.Both, AtlasWriteCensus.Compare(baseline, mixed));
+    }
+    [Theory]
+    [InlineData(0, (int)AtlasWriteCensus.Difference.Other)]
+    [InlineData(40, (int)AtlasWriteCensus.Difference.Color)]
+    public void FieldComparisonRetainsSignedZeroAndNanPayload(int offset, int expected)
+    {
+        AtlasQuad first = default, second = default;
+        WriteBits(ref second, offset, unchecked((int)0x80000000));
+        Assert.Equal((AtlasWriteCensus.Difference)expected, AtlasWriteCensus.Compare(first, second));
+        WriteBits(ref first, offset, 0x7FC00001); WriteBits(ref second, offset, 0x7FC00001);
+        Assert.Equal(AtlasWriteCensus.Difference.None, AtlasWriteCensus.Compare(first, second));
+        WriteBits(ref second, offset, 0x7FC00002);
+        Assert.Equal((AtlasWriteCensus.Difference)expected, AtlasWriteCensus.Compare(first, second));
+    }
+    [Fact]
+    public void FieldComparisonDoesNotAllocateAfterWarmup()
+    {
+        AtlasQuad first = default, second = default;
+        WriteBits(ref second, 40, 1); WriteBits(ref second, 56, 1);
+        int checksum = 0;
+        for (int i = 0; i < 10_000; i++) checksum += (int)AtlasWriteCensus.Compare(first, second)!.Value;
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 10_000; i++) checksum += (int)AtlasWriteCensus.Compare(first, second)!.Value;
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.Equal(0, allocated); Assert.Equal(60_000, checksum);
+    }
+    private static void WriteBits(ref AtlasQuad quad, int offset, int bits) =>
+        MemoryMarshal.Write(MemoryMarshal.AsBytes(MemoryMarshal.CreateSpan(ref quad, 1)).Slice(offset), in bits);
+    [Fact]
+    public void SingleComparisonResultPartitionsCountersAndUnknownErrors()
+    {
+        long writes = AtlasWriteCensus.Writes, identical = AtlasWriteCensus.Identical, different = AtlasWriteCensus.Different;
+        long unknown = AtlasWriteCensus.Unknown, errors = AtlasWriteCensus.Errors;
+        long color = AtlasWriteCensus.ColorOnly, other = AtlasWriteCensus.OtherOnly, both = AtlasWriteCensus.ColorAndOther;
+        var interval = new AtlasWriteCensus.Interval(); interval.CloseSuccessful();
+        AtlasWriteCensus.Record(interval, AtlasWriteCensus.Difference.None, false);
+        AtlasWriteCensus.Record(interval, AtlasWriteCensus.Difference.Color, false);
+        AtlasWriteCensus.Record(interval, AtlasWriteCensus.Difference.Other, false);
+        AtlasWriteCensus.Record(interval, AtlasWriteCensus.Difference.Both, false);
+        AtlasWriteCensus.Record(interval, null, false); AtlasWriteCensus.Record(interval, null, true);
+        Assert.Equal(writes + 6, AtlasWriteCensus.Writes); Assert.Equal(identical + 1, AtlasWriteCensus.Identical);
+        Assert.Equal(different + 3, AtlasWriteCensus.Different); Assert.Equal(unknown + 2, AtlasWriteCensus.Unknown); Assert.Equal(errors + 1, AtlasWriteCensus.Errors);
+        Assert.Equal(color + 1, AtlasWriteCensus.ColorOnly); Assert.Equal(other + 1, AtlasWriteCensus.OtherOnly); Assert.Equal(both + 1, AtlasWriteCensus.ColorAndOther);
+        Assert.Equal(AtlasWriteCensus.Different, AtlasWriteCensus.ColorOnly + AtlasWriteCensus.OtherOnly + AtlasWriteCensus.ColorAndOther);
+        Assert.Equal(AtlasWriteCensus.Writes, AtlasWriteCensus.Identical + AtlasWriteCensus.Different + AtlasWriteCensus.Unknown);
+        Assert.Equal(AtlasWriteCensus.IntervalKind.Unknown, interval.CloseSuccessful());
     }
     [Fact]
     public void IntervalPriorityIsUnknownThenDifferentThenIdenticalThenEmpty()
     {
         var interval = new AtlasWriteCensus.Interval();
-        interval.Observe(true); Assert.Equal(AtlasWriteCensus.IntervalKind.Unknown, interval.CloseSuccessful());
+        interval.Observe(AtlasWriteCensus.Difference.None); Assert.Equal(AtlasWriteCensus.IntervalKind.Unknown, interval.CloseSuccessful());
         Assert.Equal(AtlasWriteCensus.IntervalKind.Empty, interval.CloseSuccessful());
-        interval.Observe(true); interval.Observe(true); Assert.Equal(AtlasWriteCensus.IntervalKind.Identical, interval.CloseSuccessful());
-        interval.Observe(true); interval.Observe(false); Assert.Equal(AtlasWriteCensus.IntervalKind.Different, interval.CloseSuccessful());
-        interval.Observe(false); interval.Observe(null); Assert.Equal(AtlasWriteCensus.IntervalKind.Unknown, interval.CloseSuccessful());
+        interval.Observe(AtlasWriteCensus.Difference.None); interval.Observe(AtlasWriteCensus.Difference.None); Assert.Equal(AtlasWriteCensus.IntervalKind.Identical, interval.CloseSuccessful());
+        interval.Observe(AtlasWriteCensus.Difference.None); interval.Observe(AtlasWriteCensus.Difference.Color); Assert.Equal(AtlasWriteCensus.IntervalKind.Different, interval.CloseSuccessful());
+        interval.Observe(AtlasWriteCensus.Difference.Both); interval.Observe(null); Assert.Equal(AtlasWriteCensus.IntervalKind.Unknown, interval.CloseSuccessful());
         interval.Invalidate(); Assert.Equal(AtlasWriteCensus.IntervalKind.Unknown, interval.CloseSuccessful());
     }
     [Fact]
@@ -82,8 +147,14 @@ public sealed class AtlasWriteCensusTests
         Assert.Equal(identical + 1, AtlasPartialUploads.CensusIdenticalWrites);
         Assert.True(state.Begin().Finish(true)); first.SetDirty(false);
         long different = AtlasPartialUploads.CensusDifferentWrites;
+        long otherWrites = AtlasPartialUploads.CensusOtherOnlyWrites;
         AtlasQuad changed = default; changed.V1.Location = new Vector3(1, 2, 3); a.Data = changed;
         Assert.Equal(changed.V1.Location, first.Array[0].V1.Location); Assert.Equal(different + 1, AtlasPartialUploads.CensusDifferentWrites);
+        Assert.Equal(otherWrites + 1, AtlasPartialUploads.CensusOtherOnlyWrites);
+        Assert.True(state.Begin().Finish(true)); first.SetDirty(false);
+        long colorWrites = AtlasPartialUploads.CensusColorOnlyWrites;
+        WriteBits(ref changed, 40, 1); a.Data = changed;
+        Assert.Equal(colorWrites + 1, AtlasPartialUploads.CensusColorOnlyWrites);
         Assert.True(state.Begin().Finish(true)); first.SetDirty(false);
         long unknown = AtlasPartialUploads.CensusUnknownWrites;
         FieldInfo index = AccessTools.Field(AtlasWriteCoverage.InternalQuadType, "_index"); index.SetValue(a, 1000);
@@ -156,6 +227,7 @@ public sealed class AtlasWriteCensusTests
         state.Owner.Gate.Enter();
         try { Assert.Equal(AtlasWriteCensus.IntervalKind.Identical, state.WriteInterval!.CloseSuccessful()); }
         finally { state.Owner.Gate.Exit(); }
+        Assert.Equal(AtlasPartialUploads.CensusDifferentWrites, AtlasPartialUploads.CensusColorOnlyWrites + AtlasPartialUploads.CensusOtherOnlyWrites + AtlasPartialUploads.CensusColorAndOtherWrites);
     }
 
     // Identity-only headless binding: no COM/GPU method is called on this shell, including during cleanup.
