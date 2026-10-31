@@ -33,6 +33,7 @@ Mark entries not yet released as (unreleased).
 
 ## Experimental (off unless you turn it on)
 
+- Empty wrecks were checked increasingly rarely in large battles. An experimental benchmark-only switch keeps cleanup checks on a fixed cycle while preserving rebuild plans and other native protections. Off by default; game performance validation is incomplete. (unreleased)
 - Idle-worker experiment: the game busy-spins while pool threads have no tasks. An opt-in guarded path waits for a work notification after a short spin, preserving native task execution, completion waits and worker priorities. Disabled by default while frame-time and simulation-speed validation are incomplete. (unreleased)
 - Sparse atlas upload experiment: tracks native sprite edits and tests exact changed regions or one merged span, with full uploads for structural or unverified changes. Native worker edits and complete draw calls are synchronized per sprite manager. Disabled by default while performance and game validation are incomplete. (unreleased)
 - Atlas-buffer upload experiment: evaluates the game's alternate buffer update path for ship sprites, retaining native geometry and drawing. Disabled by default; benchmark validation is incomplete. (unreleased)

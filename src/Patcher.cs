@@ -34,6 +34,7 @@ internal static class Patcher
         (AtlasUploadMode.Target, typeof(AtlasUploadMode)),
         .. AtlasPartialUploads.Patches,
         .. ParallelIdleParking.Patches,
+        .. CullCadence.Patches,
         (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
         (MapNodeText.Target, typeof(MapNodeText)),
         (MusicSeek.Target, typeof(MusicSeek)),
@@ -73,6 +74,7 @@ internal static class Patcher
             }
             if (AtlasPartialUploads.Requested) _ = AtlasPartialUploads.Initialize();
             if (ParallelIdleParking.Requested) _ = ParallelIdleParking.Initialize();
+            if (CullCadence.Requested) _ = CullCadence.Initialize();
             Log.Info($"Patched {patches.Count} methods + {inlinerCount} R2R inliners in {sw.ElapsedMilliseconds} ms");
             return true;
         }
@@ -92,6 +94,7 @@ internal static class Patcher
     internal static void RollBack(Action unpatchAll)
     {
         BlueprintToggleEvaluation.EndValidatedUpdate();
+        CullCadence.Disable();
         ParallelIdleParking.Disable();
         AtlasPartialUploads.Disable();
         try
