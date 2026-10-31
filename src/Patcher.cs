@@ -19,7 +19,7 @@ namespace Performance;
 /// table (<see cref="R2RInlineInfo"/>) and re-patched with <see cref="Rejit"/>, which rebuilds them from IL so they call
 /// the patched method. Shared generic code is never patched; if the table lists a generic inliner, loading is refused.
 ///
-/// Performance patches change no sim result (same calls, same values). Desync fixes (<see cref="PlayerMoney"/>, <see cref="MissionTrade"/>, <see cref="ForeignJobArrival"/>) do, so
+/// Performance patches preserve sim results and native callback behavior. Desync fixes (<see cref="PlayerMoney"/>, <see cref="MissionTrade"/>, <see cref="ForeignJobArrival"/>) change them, so
 /// every MP player must run the same mod version.
 /// </summary>
 internal static class Patcher
