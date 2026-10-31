@@ -26,6 +26,17 @@ internal static class AtlasPartialUploads
     private static long _dedicatedLockOwners, _monitorLockOwners;
     internal static long DedicatedLockOwners => Interlocked.Read(ref _dedicatedLockOwners);
     internal static long MonitorLockOwners => Interlocked.Read(ref _monitorLockOwners);
+    internal static bool WriteCensusRequested => AtlasWriteCensus.Requested;
+    internal static long CensusWrites => AtlasWriteCensus.Writes;
+    internal static long CensusIdenticalWrites => AtlasWriteCensus.Identical;
+    internal static long CensusDifferentWrites => AtlasWriteCensus.Different;
+    internal static long CensusUnknownWrites => AtlasWriteCensus.Unknown;
+    internal static long CensusSuccessfulIntervals => AtlasWriteCensus.Successful;
+    internal static long CensusIdenticalIntervals => AtlasWriteCensus.IdenticalIntervals;
+    internal static long CensusDifferentIntervals => AtlasWriteCensus.DifferentIntervals;
+    internal static long CensusUnknownIntervals => AtlasWriteCensus.UnknownIntervals;
+    internal static long CensusEmptyIntervals => AtlasWriteCensus.EmptyIntervals;
+    internal static long CensusObserverErrors => AtlasWriteCensus.Errors;
     internal static bool IsRequested(string? value) => value is "2" or "3";
     private static int _ready, _cleanupPending, _cleanupAll, _synchronizing;
     [ThreadStatic] private static int _heldGates;
@@ -167,6 +178,7 @@ internal static class AtlasPartialUploads
             if (!snapshot[i].TryGetTarget(out UploadState? state)) continue;
             using GateLease lease = new(state.Owner);
             bool pending = all || state.Dirty.HasPendingChanges || state.Generation != state.Owner.Generation || state.UploadDepth != 0;
+            AtlasWriteCensus.Invalidate(state.WriteInterval);
             state.Dirty.Fail(); state.NeedsRecovery |= pending;
         }
         Recover();
@@ -213,6 +225,7 @@ internal static class AtlasPartialUploads
             // Native UpdateDirtyData may clear its flag after our wrapper returned. Restore it only at the next frame.
             try
             {
+                AtlasWriteCensus.Invalidate(state.WriteInterval);
                 unsafe { _ = array.GetUnsafeTempPointer(readOnly: false); }
                 state.NeedsRecovery = false;
             }
@@ -273,6 +286,8 @@ internal static class AtlasPartialUploads
         internal long Generation = owner.Generation, Identity;
         internal int UploadDepth;
         internal bool NeedsRecovery;
+        internal readonly AtlasWriteCensus.Interval? WriteInterval = AtlasWriteCensus.CreateInterval();
+        internal long CensusConfirmedIdentity = -1;
 
         internal UploadAttempt Begin() => Begin(SingleRange);
 
@@ -280,12 +295,13 @@ internal static class AtlasPartialUploads
         {
             UploadDepth++;
             if (UploadDepth != 1) { FailPending(); return new UploadAttempt(this, default, false); }
+            if (Generation != Owner.Generation || Owner.Depth != 0 || NeedsRecovery) AtlasWriteCensus.Invalidate(WriteInterval);
             if (Generation != Owner.Generation || Owner.Depth != 0 || !Dirty.HasPendingChanges) Dirty.RequireFull();
             return new UploadAttempt(this, Dirty.Plan(singleRange), true);
         }
 
-        internal void FailPending() { Dirty.RequireFull(); NeedsRecovery = true; }
-        internal void Fail() { Dirty.Fail(); NeedsRecovery = true; }
+        internal void FailPending() { AtlasWriteCensus.Invalidate(WriteInterval); Dirty.RequireFull(); NeedsRecovery = true; }
+        internal void Fail() { AtlasWriteCensus.Invalidate(WriteInterval); Dirty.Fail(); NeedsRecovery = true; }
     }
 
     internal readonly struct UploadAttempt(UploadState state, AtlasUploadPlan plan, bool owns, bool requireCommit = false)
@@ -318,6 +334,8 @@ internal static class AtlasPartialUploads
                     Generation == State.Owner.Generation && Identity == State.Identity && State.Dirty.Complete(Plan.Version))
                 {
                     State.NeedsRecovery = false;
+                    if (State.WriteInterval != null) State.CensusConfirmedIdentity = Identity;
+                    AtlasWriteCensus.Complete(State.WriteInterval);
                     return true;
                 }
                 if (Owns) State.Fail(); else State.FailPending();
@@ -349,6 +367,7 @@ internal static class AtlasPartialUploads
         bool sameBuffer = buffer == null ? state.Buffer == null : state.Buffer != null && state.Buffer.TryGetTarget(out Buffer? old) && ReferenceEquals(old, buffer);
         if (state.Dirty.Capacity != capacity || state.Source != source || !sameBuffer)
         {
+            AtlasWriteCensus.Invalidate(state.WriteInterval);
             state.Dirty.Resize(capacity);
             state.Identity++;
             state.Source = source;
@@ -357,10 +376,11 @@ internal static class AtlasPartialUploads
         }
         if (state.Generation != owner.Generation)
         {
+            AtlasWriteCensus.Invalidate(state.WriteInterval);
             state.Generation = owner.Generation;
             state.Dirty.RequireFull();
         }
-        if (_native.Dirty(array) && !state.Dirty.HasPendingChanges) state.Dirty.RequireFull();
+        if (_native.Dirty(array) && !state.Dirty.HasPendingChanges) { AtlasWriteCensus.Invalidate(state.WriteInterval); state.Dirty.RequireFull(); }
         if (state.UploadDepth != 0) state.FailPending();
         return state;
     }
@@ -379,6 +399,52 @@ internal static class AtlasPartialUploads
     }
 
     internal enum ScopeKind { Write, Structural, Draw }
+
+    internal static void ObserveWrite(object quad, Owner owner, in AtlasQuad value)
+    {
+        if (!AtlasWriteCensus.Requested) return;
+        AtlasWriteCensus.Interval? interval = null;
+        bool? identical = null;
+        bool error = false;
+        try
+        {
+            if (Ready && AtlasWriteCensus.LayoutSupported && _native != null && _heldGates > 0 && owner.Gate.IsHeldByCurrentThread &&
+                !owner.Retired && quad.GetType() == typeof(AtlasQuadManager.InternalManagedAtlasQuad) &&
+                owner.Manager.TryGetTarget(out AtlasQuadManager? manager))
+            {
+                var native = (AtlasQuadManager.InternalManagedAtlasQuad)quad;
+                if (ReferenceEquals(native._pm, manager) && (uint)native._subIndex < (uint)manager._lists.Length &&
+                    manager._lists[native._subIndex] is { } list && list.GetType() == typeof(GraphicsList<AtlasQuad>) &&
+                    list.InternalArray is { } array && array.GetType() == _native.Type && Arrays.TryGetValue(array, out UploadState? state) &&
+                    ReferenceEquals(state.Owner, owner))
+                {
+                    // The existing mutation scope holds this owner only. Never attach a foreign array's ledger.
+                    interval = state.WriteInterval;
+                    if (state.Array.TryGetTarget(out var tracked) && ReferenceEquals(array, tracked) &&
+                        !state.NeedsRecovery && state.UploadDepth == 0 && state.Generation == owner.Generation && owner.Depth == 0 &&
+                        state.CensusConfirmedIdentity == state.Identity && !_native.Disposed(array) && (uint)native._index < (uint)list.Count)
+                    {
+                        int capacity = _native.Size(array);
+                        IntPtr source = _native.Source(array);
+                        Buffer? buffer = _native.Buffer(array);
+                        bool sameBuffer = buffer != null && buffer.GetType() == typeof(Buffer) && buffer.NativePointer != IntPtr.Zero &&
+                            state.Buffer != null && state.Buffer.TryGetTarget(out Buffer? expected) && ReferenceEquals(buffer, expected);
+                        if (sameBuffer && source != IntPtr.Zero && source == state.Source && capacity == state.Dirty.Capacity &&
+                            capacity > 0 && (long)capacity * Unsafe.SizeOf<AtlasQuad>() <= int.MaxValue && (uint)native._index < (uint)capacity)
+                        {
+                            unsafe
+                            {
+                                ref AtlasQuad current = ref Unsafe.AsRef<AtlasQuad>((void*)IntPtr.Add(source, native._index * Unsafe.SizeOf<AtlasQuad>()));
+                                identical = AtlasWriteCensus.SameBytes(in current, in value);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception) { error = true; }
+        AtlasWriteCensus.Record(interval, identical, error);
+    }
     internal readonly record struct Mutation(Owner? Owner, int SubIndex, ScopeKind Kind);
 
     private static Mutation BeginMutation(AtlasQuadManager? manager, int subIndex = -1, bool retire = false, ScopeKind kind = ScopeKind.Structural)
@@ -447,12 +513,13 @@ internal static class AtlasPartialUploads
             {
                 // An unrecognized native call still owns its original arguments. Do not schedule a CPU-shadow
                 // overwrite of another source; only a known outstanding transaction needs delayed dirty recovery.
-                state.Dirty.Fail();
+                AtlasWriteCensus.Invalidate(state.WriteInterval); state.Dirty.Fail();
                 return false;
             }
             if (state.Dirty.Capacity != _native.Size(array) || state.Source != source.DataPointer)
-            { state.Dirty.Resize(_native.Size(array)); state.Source = source.DataPointer; state.Identity++; }
-            if (!retry && !_native.Dirty(array)) { state.Dirty.Fail(); return false; }
+            { AtlasWriteCensus.Invalidate(state.WriteInterval); state.Dirty.Resize(_native.Size(array)); state.Source = source.DataPointer; state.Identity++; }
+            if (!retry && !_native.Dirty(array)) { AtlasWriteCensus.Invalidate(state.WriteInterval); state.Dirty.Fail(); return false; }
+            if (_native.Dirty(array) && !state.Dirty.HasPendingChanges) AtlasWriteCensus.Invalidate(state.WriteInterval);
             attempt = state.Begin();
             return true;
         }
@@ -487,9 +554,10 @@ internal static class AtlasPartialUploads
 
     internal sealed class DataWriteHook
     {
-        public static void Prefix(object __instance, out Mutation __state)
+        public static void Prefix(object __instance, in AtlasQuad value, out Mutation __state)
         {
             __state = BeginMutation(((AtlasQuadManager.InternalManagedAtlasQuad)__instance)._pm, kind: ScopeKind.Write);
+            if (AtlasWriteCensus.Requested && __state.Owner != null) ObserveWrite(__instance, __state.Owner, in value);
             if (__state.Owner != null) Mark(__instance, __state.Owner);
         }
         public static Exception? Finalizer(Exception? __exception, Mutation __state) => EndMutation(__exception, __state);

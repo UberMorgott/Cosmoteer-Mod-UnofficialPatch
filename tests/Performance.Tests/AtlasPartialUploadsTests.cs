@@ -740,7 +740,7 @@ public sealed class AtlasPartialUploadsTests : IDisposable
     private static unsafe void AssertMirror(NativeFixture fixture, byte[] gpu) =>
         Assert.True(new ReadOnlySpan<byte>((void*)fixture.Pointer, fixture.ByteCount).SequenceEqual(gpu));
 
-    private sealed class NativeFixture : IDisposable
+    internal sealed class NativeFixture : IDisposable
     {
         internal readonly AtlasQuadManager Manager = (AtlasQuadManager)RuntimeHelpers.GetUninitializedObject(typeof(AtlasQuadManager));
         internal readonly GraphicsArray<AtlasQuad> Array;
