@@ -33,8 +33,7 @@ internal static class Patcher
         (BlueprintEvaluationScope.Target, typeof(BlueprintEvaluationScope)),
         .. BlueprintToggleUpdates.Patches,
         .. SmoothedActiveSet.Patches,
-        (AtlasUploadMode.Target, typeof(AtlasUploadMode)),
-        .. AtlasPartialUploads.Patches,
+        .. AtlasRangeUpload.Patches,
         .. ParallelIdleParking.Patches,
         .. CullCadence.Patches,
         .. RaycastScratch.Patches,
@@ -79,7 +78,7 @@ internal static class Patcher
             // Throws (rollback) when the game changed; false only keeps this one feature native (foreign code).
             if (BlueprintToggleUpdates.Requested) _ = BlueprintToggleUpdates.Initialize();
             if (SmoothedActiveSet.Requested) _ = SmoothedActiveSet.Initialize();
-            if (AtlasPartialUploads.Requested) _ = AtlasPartialUploads.Initialize();
+            if (AtlasRangeUpload.Requested) _ = AtlasRangeUpload.Initialize();
             if (ParallelIdleParking.Requested) _ = ParallelIdleParking.Initialize();
             if (CullCadence.Requested) _ = CullCadence.Initialize();
             if (RaycastScratch.Requested) _ = RaycastScratch.Initialize();
@@ -109,7 +108,7 @@ internal static class Patcher
         RaycastScratch.Disable();
         CullCadence.Disable();
         ParallelIdleParking.Disable();
-        AtlasPartialUploads.Disable();
+        AtlasRangeUpload.Disable();
         try
         {
             unpatchAll();
@@ -165,6 +164,34 @@ internal static class Patcher
             throw new InvalidOperationException($"{method} IL changed (sha256 {actual}):\n  " + listing.Replace("\n", "\n  "));
         }
         return code;
+    }
+
+    /// <summary>
+    /// Stops the JIT from inlining <paramref name="method"/> into code compiled later (e.g. a patched caller rebuilt from
+    /// IL), so such callers reach its detour. Already compiled inlined copies are not affected.
+    /// </summary>
+    internal static bool TryDisableInlining(MethodBase method, out string? error) =>
+        TryDisableInlining(typeof(Harmony).Assembly.GetType("MonoMod.Core.Platforms.PlatformTriple"), method, out error);
+
+    internal static bool TryDisableInlining(Type? platformType, MethodBase method, out string? error)
+    {
+        try
+        {
+            object? platform = platformType?.GetProperty("Current", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            MethodInfo? disable = platformType?.GetMethod("TryDisableInlining", BindingFlags.Public | BindingFlags.Instance, null, [typeof(MethodBase)], null);
+            if (platform == null || disable?.ReturnType != typeof(bool) || disable.Invoke(platform, [method]) is not true)
+            {
+                error = "Installed MonoMod cannot disable future inlining of " + method;
+                return false;
+            }
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = "MonoMod DisableInlining failed for " + method + ": " + (ex.InnerException ?? ex).Message;
+            return false;
+        }
     }
 
     /// <summary>Precompiled methods in the target module containing an inlined copy of <paramref name="patched"/>. Throws if unsafe.</summary>

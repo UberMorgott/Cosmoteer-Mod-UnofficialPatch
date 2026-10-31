@@ -16,6 +16,10 @@
       <HintPath>$(GameBin)\SharpDX.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="SharpDX.DXGI">
+      <HintPath>$(GameBin)\SharpDX.DXGI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="SharpDX.Direct3D11">
       <HintPath>$(GameBin)\SharpDX.Direct3D11.dll</HintPath>
       <Private>false</Private>
@@ -32,6 +36,10 @@
     </Reference>
     <Reference Include="HalflingCore">
       <HintPath>..\..\lib\HalflingCore.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="HalflingPlatformWDX">
+      <HintPath>..\..\lib\HalflingPlatformWDX.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

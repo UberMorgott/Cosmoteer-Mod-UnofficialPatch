@@ -70,7 +70,7 @@ internal static class ParallelIdleParking
                 RequireIl(target, PatchProcessor.GetOriginalInstructions(target));
                 if (Patcher.FindR2RInliners(target).Count != 0)
                     throw new NotSupportedException("FastParallel target has precompiled inliners: " + target);
-                if (!AtlasWriteCoverage.TryDisableInlining(target, out string? error)) throw new NotSupportedException(error);
+                if (!Patcher.TryDisableInlining(target, out string? error)) throw new NotSupportedException(error);
                 Patches? hooks = Harmony.GetPatchInfo(target);
                 if (hooks == null || !hooks.Transpilers.Any(p => p.owner == Patcher.HarmonyId && p.PatchMethod.DeclaringType == patch) ||
                     (patch == typeof(SignalHook) && !hooks.Finalizers.Any(p => p.owner == Patcher.HarmonyId && p.PatchMethod.DeclaringType == patch)))

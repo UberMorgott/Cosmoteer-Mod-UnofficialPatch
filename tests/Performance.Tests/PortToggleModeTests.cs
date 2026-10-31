@@ -13,6 +13,7 @@ using Xunit;
 // Typed access to internal game members, as in the mod (attribute type comes from the mod via InternalsVisibleTo).
 [assembly: IgnoresAccessChecksTo("Cosmoteer")]
 [assembly: IgnoresAccessChecksTo("HalflingCore")]
+[assembly: IgnoresAccessChecksTo("HalflingPlatformWDX")]
 // Tests patch the same game methods with Harmony; run them one at a time.
 [assembly: Xunit.v3.Parallelization(Mode = Xunit.Sdk.ParallelMode.None)]
 

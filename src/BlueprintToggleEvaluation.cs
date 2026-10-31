@@ -34,7 +34,7 @@ internal static class BlueprintToggleEvaluation
     /// <summary>
     /// Opens the interval for this specialization and for <see cref="BlueprintToggleUpdates"/>, each only while no foreign
     /// Harmony owner patches one of its read dependencies. One pass over the patched methods serves both, and also opens
-    /// <see cref="SmoothedActiveSet"/>'s frame.
+    /// <see cref="SmoothedActiveSet"/>'s frame and refreshes <see cref="AtlasRangeUpload"/>'s foreign-owner state.
     /// </summary>
     public static void BeginValidatedUpdate()
     {
@@ -44,7 +44,8 @@ internal static class BlueprintToggleEvaluation
         bool leaf = !_nativeRejected;
         bool skip = BlueprintToggleUpdates.Ready;
         bool smoothed = SmoothedActiveSet.Ready;
-        if (!leaf && !skip && !smoothed) return;
+        bool atlas = AtlasRangeUpload.Ready;
+        if (!leaf && !skip && !smoothed && !atlas) return;
         try
         {
             if (leaf && !_nativeValidated) ValidateNativeDependencies();
@@ -54,7 +55,7 @@ internal static class BlueprintToggleEvaluation
             _nativeRejected = true;
             Reject(ex.Message);
             leaf = false;
-            if (!skip && !smoothed) return;
+            if (!skip && !smoothed && !atlas) return;
         }
         try
         {
@@ -64,7 +65,8 @@ internal static class BlueprintToggleEvaluation
                 bool leafDependency = leaf && IsReadDependency(patched);
                 bool skipDependency = skip && BlueprintToggleUpdates.IsDependency(patched);
                 bool smoothedDependency = smoothed && SmoothedActiveSet.IsDependency(patched);
-                if (!leafDependency && !skipDependency && !smoothedDependency) continue;
+                bool atlasDependency = atlas && AtlasRangeUpload.IsDependency(patched);
+                if (!leafDependency && !skipDependency && !smoothedDependency && !atlasDependency) continue;
                 Patches? patches = Harmony.GetPatchInfo(patched);
                 if (patches == null) throw new InvalidOperationException("Patch information disappeared for " + patched);
                 foreach (string owner in patches.Owners)
@@ -86,13 +88,19 @@ internal static class BlueprintToggleEvaluation
                         SmoothedActiveSet.LogForeign(reason);
                         smoothed = false;
                     }
+                    if (atlasDependency)
+                    {
+                        AtlasRangeUpload.SetForeign(reason);
+                        atlas = false;
+                    }
                     break;
                 }
-                if (!leaf && !skip && !smoothed) return;
+                if (!leaf && !skip && !smoothed && !atlas) return;
             }
             _validatedUpdate = leaf;
             BlueprintToggleUpdates.BeginFrame(skip);
             SmoothedActiveSet.BeginFrame(smoothed);
+            if (atlas) AtlasRangeUpload.SetForeign(null);
         }
         catch (Exception ex)
         {
@@ -103,6 +111,7 @@ internal static class BlueprintToggleEvaluation
             }
             if (skip) BlueprintToggleUpdates.Reject(ex.Message);
             if (smoothed) SmoothedActiveSet.Reject(ex.Message);
+            if (atlas) AtlasRangeUpload.SetForeign(ex.Message);
         }
     }
 

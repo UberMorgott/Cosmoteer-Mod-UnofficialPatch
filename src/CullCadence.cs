@@ -50,7 +50,7 @@ internal static class CullCadence
             if (director.FrameCount != 0) throw new InvalidOperationException("Cull cadence requires Director.FrameCount == 0");
             ValidateNative();
             if (Patcher.FindR2RInliners(Target).Count != 0) throw new NotSupportedException("Cull cadence target has precompiled inliners");
-            if (!AtlasWriteCoverage.TryDisableInlining(Target, out string? error)) throw new NotSupportedException(error);
+            if (!Patcher.TryDisableInlining(Target, out string? error)) throw new NotSupportedException(error);
             Patches? patches = Harmony.GetPatchInfo(Target);
             if (patches == null || !HasHook(patches.Prefixes, nameof(Prefix)) || !HasHook(patches.Transpilers, nameof(Transpiler)) || !HasHook(patches.Finalizers, nameof(Finalizer)))
                 throw new InvalidOperationException("Cull cadence hook coverage missing");

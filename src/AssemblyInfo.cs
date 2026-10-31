@@ -5,6 +5,7 @@ using System.Runtime.Versioning;
 // members can be used directly (no reflection, no per-call overhead).
 [assembly: IgnoresAccessChecksTo("Cosmoteer")]
 [assembly: IgnoresAccessChecksTo("HalflingCore")]
+[assembly: IgnoresAccessChecksTo("HalflingPlatformWDX")]
 [assembly: InternalsVisibleTo("Performance.Tests")]
 [assembly: SupportedOSPlatform("windows7.0")]
 

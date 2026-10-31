@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     Game runs on net10.0 (Bin\Cosmoteer.runtimeconfig.json), so the mod targets net10.0 too.
-    lib\ holds publicized (stripped) copies of Cosmoteer.dll / HalflingCore.dll (target PublicizeGameAssemblies;
+    lib\ holds publicized (stripped) copies of Cosmoteer.dll / HalflingCore.dll / HalflingPlatformWDX.dll (D3D11 backend) (target PublicizeGameAssemblies;
     needs the global tool: dotnet tool install -g BepInEx.AssemblyPublicizer.Cli).
   -->
   <PropertyGroup>
@@ -24,9 +24,9 @@
 
   <!-- Regenerate lib\ (gitignored) from the installed game when missing or older than the game DLL. -->
   <Target Name="PublicizeGameAssemblies" BeforeTargets="ResolveAssemblyReferences"
-          Inputs="$(GameBin)\Cosmoteer.dll;$(GameBin)\HalflingCore.dll"
-          Outputs="lib\Cosmoteer.dll;lib\HalflingCore.dll">
-    <Exec Command="assembly-publicizer &quot;$(GameBin)\Cosmoteer.dll&quot; &quot;$(GameBin)\HalflingCore.dll&quot; --strip -f -o &quot;$(MSBuildProjectDirectory)\lib&quot;"
+          Inputs="$(GameBin)\Cosmoteer.dll;$(GameBin)\HalflingCore.dll;$(GameBin)\HalflingPlatformWDX.dll"
+          Outputs="lib\Cosmoteer.dll;lib\HalflingCore.dll;lib\HalflingPlatformWDX.dll">
+    <Exec Command="assembly-publicizer &quot;$(GameBin)\Cosmoteer.dll&quot; &quot;$(GameBin)\HalflingCore.dll&quot; &quot;$(GameBin)\HalflingPlatformWDX.dll&quot; --strip -f -o &quot;$(MSBuildProjectDirectory)\lib&quot;"
           EnvironmentVariables="DOTNET_ROLL_FORWARD=Major" />
   </Target>
 
@@ -45,6 +45,10 @@
     </Reference>
     <Reference Include="HalflingCore">
       <HintPath>lib\HalflingCore.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="HalflingPlatformWDX">
+      <HintPath>lib\HalflingPlatformWDX.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <!--

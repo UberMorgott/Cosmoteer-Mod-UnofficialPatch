@@ -73,7 +73,7 @@ internal static class RaycastScratch
             {
                 _ = Transpiler(PatchProcessor.GetOriginalInstructions(target), target);
                 if (Patcher.FindR2RInliners(target).Count != 0) throw new NotSupportedException("Raycast scratch target has precompiled inliners: " + target);
-                if (!AtlasWriteCoverage.TryDisableInlining(target, out string? error)) throw new NotSupportedException(error);
+                if (!Patcher.TryDisableInlining(target, out string? error)) throw new NotSupportedException(error);
             }
             ValidateHookCoverage();
             if (!Compatible()) throw new NotSupportedException("Foreign patch on PhysicsExtensions scratch dependency");

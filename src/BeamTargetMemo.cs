@@ -127,7 +127,7 @@ internal static class BeamTargetMemo
                 ValidateDefinition(definition);
                 foreach (MethodBase parent in Patcher.FindR2RInliners(definition.Target))
                     if (!_definitions.Any(d => Same(d.Target, parent))) throw new NotSupportedException("Uncovered precompiled beam memo caller: " + parent);
-                if (!AtlasWriteCoverage.TryDisableInlining(definition.Target, out string? error)) throw new NotSupportedException(error);
+                if (!Patcher.TryDisableInlining(definition.Target, out string? error)) throw new NotSupportedException(error);
             }
             if (!Compatible(out string? compatibilityError)) throw new NotSupportedException(compatibilityError);
             _director = director; director.FrameStarting += OnFrameStarting;

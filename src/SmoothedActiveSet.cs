@@ -285,7 +285,7 @@ internal static class SmoothedActiveSet
                 Patches? patches = Harmony.GetPatchInfo(target);
                 if (patches == null || !patches.Prefixes.Concat(patches.Finalizers).Any(p => p.owner == Patcher.HarmonyId && p.PatchMethod.DeclaringType == patch))
                     throw new InvalidOperationException("Smoothed value active set hook missing on " + target.DeclaringType?.Name + "." + target.Name);
-                if (!AtlasWriteCoverage.TryDisableInlining(target, out string? error)) throw new NotSupportedException(error);
+                if (!Patcher.TryDisableInlining(target, out string? error)) throw new NotSupportedException(error);
             }
         }
         catch (Exception ex)
