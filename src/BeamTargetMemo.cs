@@ -127,7 +127,7 @@ internal static class BeamTargetMemo
                 if (!AtlasWriteCoverage.TryDisableInlining(definition.Target, out string? error)) throw new NotSupportedException(error);
             }
             ValidateHooks();
-            if (!Compatible()) throw new NotSupportedException("Foreign patch on beam target memo dependency");
+            if (!Compatible(out string? compatibilityError)) throw new NotSupportedException(compatibilityError);
             _director = director; director.FrameStarting += OnFrameStarting;
             Volatile.Write(ref _ready, 1);
             Log.Info("Beam target memo prototype ready: explicit owned SP EmitBeams binding required");
@@ -157,16 +157,31 @@ internal static class BeamTargetMemo
             }
         }
     }
-    // Conservative experiment: any foreign patch in either pinned engine module is unsupported, including generic
-    // definitions shared across instantiations. No generic engine methods are detoured here.
-    private static bool Compatible() => !Harmony.GetAllPatchedMethods().Any(method =>
-        (method.Module == typeof(BeamEmitter).Module || method.Module == typeof(World).Module || method.Module == typeof(object).Module ||
-         method.Module == typeof(SortedDictionary<,>).Module || method.Module == typeof(ConcurrentDictionary<,>).Module) &&
-        Harmony.GetPatchInfo(method) is { } patches && patches.Owners.Any(owner => owner != Patcher.HarmonyId));
+    // The exact complete loader inventory is the only foreign exception. Shared generic definitions in all protected
+    // modules retain the existing conservative guard; no generic engine method is detoured here.
+    private static bool Compatible(out string? error)
+    {
+        try
+        {
+            var registrations = KnownLoaderPatches.RuntimeRegistrations();
+            var loader = KnownLoaderPatches.Validate(registrations, KnownLoaderPatches.RuntimeLoaderModules());
+            foreach (var registration in registrations)
+            {
+                Module module = registration.Target.Module;
+                if (module != typeof(BeamEmitter).Module && module != typeof(World).Module && module != typeof(object).Module &&
+                    module != typeof(SortedDictionary<,>).Module && module != typeof(ConcurrentDictionary<,>).Module) continue;
+                if (registration.Owner == Patcher.HarmonyId || loader.Allows(registration)) continue;
+                error = "Foreign patch on beam target memo dependency: " + KnownLoaderPatches.Describe(registration);
+                return false;
+            }
+            error = null; return true;
+        }
+        catch (Exception ex) { error = ex.Message; return false; }
+    }
     internal static void CheckCompatibility()
     {
         if (!Ready) return;
-        try { ValidateHooks(); if (!Compatible()) Reject("Foreign patch on beam target memo dependency"); }
+        try { ValidateHooks(); if (!Compatible(out string? error)) Reject(error ?? "Beam target memo compatibility unavailable"); }
         catch (Exception ex) { Reject(ex.Message); }
     }
     private static void OnFrameStarting(object? sender, EventArgs e) => CheckCompatibility();
