@@ -24,12 +24,31 @@ internal static class GameAssemblies
     public const string GameBin = @"D:\Steam\steamapps\common\Cosmoteer\Bin";
 
     [ModuleInitializer]
-    internal static void Init() =>
+    internal static void Init()
+    {
         AssemblyLoadContext.Default.Resolving += (ctx, name) =>
         {
             string path = Path.Combine(GameBin, name.Name + ".dll");
             return File.Exists(path) ? ctx.LoadFromAssemblyPath(path) : null;
         };
+        ExcludeTestDynamicAssemblies();
+    }
+
+    /// <summary>Dynamic assemblies the tests emit as fixtures (named "Performance.Tests.*").</summary>
+    internal static bool IsTestDynamic(Assembly assembly) =>
+        assembly.IsDynamic && assembly.GetName().Name is { } name && name.StartsWith("Performance.Tests.", StringComparison.Ordinal);
+
+    /// <summary>
+    /// The blueprint toggle skip watches every later assembly load process-wide, and an unknown dynamic assembly fails it for
+    /// good; a fixture emitted by any test would otherwise disable it for every later test. Only the tests' scan hook changes:
+    /// <see cref="BlueprintToggleUpdates.ScanAssembly"/> (production) still refuses such assemblies.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ExcludeTestDynamicAssemblies()
+    {
+        Func<Assembly, string?> scan = BlueprintToggleUpdates.Scan;
+        BlueprintToggleUpdates.Scan = assembly => IsTestDynamic(assembly) ? null : scan(assembly);
+    }
 }
 
 public class PortToggleModeTests

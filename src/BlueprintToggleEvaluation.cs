@@ -33,15 +33,18 @@ internal static class BlueprintToggleEvaluation
 
     /// <summary>
     /// Opens the interval for this specialization and for <see cref="BlueprintToggleUpdates"/>, each only while no foreign
-    /// Harmony owner patches one of its read dependencies. One pass over the patched methods serves both.
+    /// Harmony owner patches one of its read dependencies. One pass over the patched methods serves both, and also opens
+    /// <see cref="SmoothedActiveSet"/>'s frame.
     /// </summary>
     public static void BeginValidatedUpdate()
     {
         _validatedUpdate = false;
         BlueprintToggleUpdates.EndFrame();
+        SmoothedActiveSet.EndFrame();
         bool leaf = !_nativeRejected;
         bool skip = BlueprintToggleUpdates.Ready;
-        if (!leaf && !skip) return;
+        bool smoothed = SmoothedActiveSet.Ready;
+        if (!leaf && !skip && !smoothed) return;
         try
         {
             if (leaf && !_nativeValidated) ValidateNativeDependencies();
@@ -51,7 +54,7 @@ internal static class BlueprintToggleEvaluation
             _nativeRejected = true;
             Reject(ex.Message);
             leaf = false;
-            if (!skip) return;
+            if (!skip && !smoothed) return;
         }
         try
         {
@@ -60,7 +63,8 @@ internal static class BlueprintToggleEvaluation
             {
                 bool leafDependency = leaf && IsReadDependency(patched);
                 bool skipDependency = skip && BlueprintToggleUpdates.IsDependency(patched);
-                if (!leafDependency && !skipDependency) continue;
+                bool smoothedDependency = smoothed && SmoothedActiveSet.IsDependency(patched);
+                if (!leafDependency && !skipDependency && !smoothedDependency) continue;
                 Patches? patches = Harmony.GetPatchInfo(patched);
                 if (patches == null) throw new InvalidOperationException("Patch information disappeared for " + patched);
                 foreach (string owner in patches.Owners)
@@ -77,12 +81,18 @@ internal static class BlueprintToggleEvaluation
                         BlueprintToggleUpdates.LogForeign(reason);
                         skip = false;
                     }
+                    if (smoothedDependency)
+                    {
+                        SmoothedActiveSet.LogForeign(reason);
+                        smoothed = false;
+                    }
                     break;
                 }
-                if (!leaf && !skip) return;
+                if (!leaf && !skip && !smoothed) return;
             }
             _validatedUpdate = leaf;
             BlueprintToggleUpdates.BeginFrame(skip);
+            SmoothedActiveSet.BeginFrame(smoothed);
         }
         catch (Exception ex)
         {
@@ -92,6 +102,7 @@ internal static class BlueprintToggleEvaluation
                 Reject(ex.Message);
             }
             if (skip) BlueprintToggleUpdates.Reject(ex.Message);
+            if (smoothed) SmoothedActiveSet.Reject(ex.Message);
         }
     }
 
@@ -99,6 +110,7 @@ internal static class BlueprintToggleEvaluation
     {
         _validatedUpdate = false;
         BlueprintToggleUpdates.EndFrame();
+        SmoothedActiveSet.EndFrame();
     }
 
     internal static bool SameMethodDefinition(MethodBase a, MethodBase b) =>

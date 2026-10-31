@@ -162,7 +162,7 @@ public sealed class AtlasWriteCoverageTests
 
     private static Action<AtlasQuadManager, AtlasQuad, int> MakeOptimizedExactWriter()
     {
-        var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("AtlasExactWriter" + Guid.NewGuid().ToString("N")), AssemblyBuilderAccess.RunAndCollect);
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("Performance.Tests.AtlasExactWriter" + Guid.NewGuid().ToString("N")), AssemblyBuilderAccess.RunAndCollect);
         assembly.SetCustomAttribute(new CustomAttributeBuilder(typeof(IgnoresAccessChecksToAttribute).GetConstructor([typeof(string)])!, ["Cosmoteer"]));
         TypeBuilder type = assembly.DefineDynamicModule("writer").DefineType("Writer", TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed);
         MethodBuilder method = type.DefineMethod("Run", MethodAttributes.Public | MethodAttributes.Static, typeof(void), [typeof(AtlasQuadManager), typeof(AtlasQuad), typeof(int)]);

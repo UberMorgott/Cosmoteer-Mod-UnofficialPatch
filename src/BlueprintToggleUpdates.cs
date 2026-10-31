@@ -246,7 +246,7 @@ internal static class BlueprintToggleUpdates
     private static bool IsVettedToggle(IBlueprintComponentToggle? toggle) => toggle != null && Array.IndexOf(ToggleRules, toggle.GetType()) >= 0;
 
     /// <summary>List&lt;T&gt; increments _version on every mutation (Add, Remove, Insert, indexer set, Clear, Sort...).</summary>
-    private static class ListAccess<T>
+    internal static class ListAccess<T>
     {
         [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_version")]
         internal static extern ref int Version(List<T> list);

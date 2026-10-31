@@ -32,6 +32,7 @@ internal static class Patcher
         .. PortToggleMode.Targets.Select(t => ((MethodBase)t.Target, typeof(PortToggleMode))),
         (BlueprintEvaluationScope.Target, typeof(BlueprintEvaluationScope)),
         .. BlueprintToggleUpdates.Patches,
+        .. SmoothedActiveSet.Patches,
         (AtlasUploadMode.Target, typeof(AtlasUploadMode)),
         .. AtlasPartialUploads.Patches,
         .. ParallelIdleParking.Patches,
@@ -77,6 +78,7 @@ internal static class Patcher
             }
             // Throws (rollback) when the game changed; false only keeps this one feature native (foreign code).
             if (BlueprintToggleUpdates.Requested) _ = BlueprintToggleUpdates.Initialize();
+            if (SmoothedActiveSet.Requested) _ = SmoothedActiveSet.Initialize();
             if (AtlasPartialUploads.Requested) _ = AtlasPartialUploads.Initialize();
             if (ParallelIdleParking.Requested) _ = ParallelIdleParking.Initialize();
             if (CullCadence.Requested) _ = CullCadence.Initialize();
@@ -102,6 +104,7 @@ internal static class Patcher
     {
         BlueprintToggleEvaluation.EndValidatedUpdate();
         BlueprintToggleUpdates.Disable();
+        SmoothedActiveSet.Disable();
         BeamTargetMemo.Disable();
         RaycastScratch.Disable();
         CullCadence.Disable();
