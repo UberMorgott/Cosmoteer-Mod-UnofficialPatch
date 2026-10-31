@@ -90,6 +90,8 @@ public sealed class BeamTargetMemoTests
     [InlineData("foreign")]
     [InlineData("late")]
     [InlineData("missing")]
+    [InlineData("secondary")]
+    [InlineData("verify-secondary")]
     public async Task IsolatedNativeCases(string scenario)
     {
         string? childCase = Environment.GetEnvironmentVariable("BEAM_MEMO_TEST_CASE");
@@ -152,6 +154,7 @@ public sealed class BeamTargetMemoTests
             using var f = new Setup();
             Assert.True(BeamTargetMemo.BindOwnedSimulation(f.Sim));
             NativeConfirmedTargetsAndProhibition(f);
+            if (scenario is "secondary" or "verify-secondary") { NativeSecondaryFilter(f); return; }
             if (scenario == "verify") { VerifyMismatch(f); return; }
             if (scenario == "verify-reentry") { VerifyReentry(f); return; }
             if (scenario == "verify-exception") { VerifyExceptionAfterHit(f); return; }
@@ -211,6 +214,99 @@ public sealed class BeamTargetMemoTests
         Assert.Equal(calls + (BeamTargetMemo.VerificationRequested ? 2 : 1), BeamTargetMemo.NativeCalls);
         Assert.Equal(fills + 1, BeamTargetMemo.EligiblePureFills); Assert.Equal(hits + 1, BeamTargetMemo.Hits);
         Assert.False(scope.Query.Value.Invalid);
+    }
+
+    private static void NativeSecondaryFilter(Setup f)
+    {
+        var filter = new EffectFilter(EffectFilter.Defaults.Enemy) { Crew = false, StructuralHealth = false, Self = false };
+        Set(f.Receiver.Rules, "SecondaryFilter", filter);
+        var target = Shell<WeaponTarget>(); Set(target, "<IsConfirmed>k__BackingField", true);
+        Set(target, "<AllowFriendly>k__BackingField", true); Set(target, "<Target>k__BackingField", f.Ship);
+        f.Provider.ExplicitTargets._targets.Add(target);
+        var players = Assert.IsType<GameRoot>(f.Sim.Game)._playerStates;
+        var hit = (Ship)AccessTools.Method(typeof(object), "MemberwiseClone").Invoke(f.Ship, null)!;
+        var metadata = Shell<ShipMetadata>(); Set(metadata, "<PlayerIndex>k__BackingField", 1); Set(hit, "<Metadata>k__BackingField", metadata);
+        players.Add(1, Shell<PlayerState>());
+        var forward = AccessTools.Method(typeof(BeamTargetMemo), "FilterPart");
+        int playerCount = players.Count;
+        foreach (bool invulnerable in new[] { false, true })
+        {
+            hit.SelfInvulnerable = invulnerable;
+            using var scope = new Scope(f);
+            long fills = BeamTargetMemo.EligiblePureFills, hits = BeamTargetMemo.Hits;
+            Assert.Same(f.Ship, BeamTargetMemo.Invoke(f.Receiver, true, f.Native));
+            Body body = f.World.CreateCircle(0.5f, 1f); body.UserData = hit;
+            body.FixtureList[0].UserData = Shell<ShipPhysics.CellsFixtureInfo>();
+            try
+            {
+                BeamTargetMemo.FilterHook.Prefix(f.Receiver, body.FixtureList[0]);
+                // Native nullable allegiance falls through AreEnemies/AreAllies and CanDamage/CanAttack.
+                Assert.Equal(!invulnerable, filter.ValidateHitShip(hit, f.Ship, 0, hit));
+                Assert.True((bool)forward.Invoke(null, [filter, f.Part, HitEffectFlags.None, false])!);
+                Assert.False(scope.Query.Value.Invalid);
+                Assert.Same(f.Ship, BeamTargetMemo.Invoke(f.Receiver, true, f.Native));
+                Assert.Equal(fills + 1, BeamTargetMemo.EligiblePureFills); Assert.Equal(hits + 1, BeamTargetMemo.Hits);
+                Assert.Equal(playerCount, players.Count);
+            }
+            finally { f.World.Remove(body); }
+        }
+        using (var scope = new Scope(f))
+        {
+            BeamTargetMemo.Invoke(f.Receiver, true, f.Native);
+            var other = new EffectFilter(EffectFilter.Defaults.Enemy);
+            _ = forward.Invoke(null, [other, f.Part, HitEffectFlags.None, false]);
+            Assert.True(scope.Query.Value.Invalid); // Equal shape does not authorize another filter instance.
+        }
+        f.Provider.Rules.ProhibitTargetPartsFilter = filter;
+        using (var scope = new Scope(f, pure: false))
+        {
+            Assert.True(scope.Query.Value.Invalid);
+        }
+        f.Provider.Rules.ProhibitTargetPartsFilter = null;
+        using (var scope = new Scope(f))
+        {
+            BeamTargetMemo.Invoke(f.Receiver, true, f.Native);
+            var sources = (Stack<ActionSourcePlayer?>)AccessTools.Field(typeof(SimRoot), "_sourcePlayerStack").GetValue(f.Sim)!;
+            sources.Push(new ActionSourcePlayer(99, null));
+            Body body = f.World.CreateCircle(0.5f, 1f); body.UserData = hit;
+            body.FixtureList[0].UserData = Shell<ShipPhysics.CellsFixtureInfo>();
+            try
+            {
+                BeamTargetMemo.FilterHook.Prefix(f.Receiver, body.FixtureList[0]);
+                Assert.True(scope.Query.Value.Invalid); Assert.False(players.ContainsKey(99));
+                _ = forward.Invoke(null, [filter, f.Part, HitEffectFlags.None, false]);
+                Assert.True(scope.Query.Value.Invalid); Assert.False(players.ContainsKey(99));
+            }
+            finally { sources.Pop(); f.World.Remove(body); }
+        }
+        using (var scope = new Scope(f))
+        {
+            BeamTargetMemo.Invoke(f.Receiver, true, f.Native);
+            players.Remove(1);
+            Body body = f.World.CreateCircle(0.5f, 1f); body.UserData = hit;
+            body.FixtureList[0].UserData = Shell<ShipPhysics.CellsFixtureInfo>();
+            try
+            {
+                BeamTargetMemo.FilterHook.Prefix(f.Receiver, body.FixtureList[0]);
+                Assert.True(scope.Query.Value.Invalid); Assert.False(players.ContainsKey(1));
+                var query = scope.Query; var native = f.Native;
+                Assert.Same(f.Ship, BeamTargetMemo.Invoke(f.Receiver, true, (receiver, argument) =>
+                { Assert.True(query.Value.Invalid); Assert.False(players.ContainsKey(1)); return native(receiver, argument); }));
+                Assert.Equal(playerCount - 1, players.Count);
+                hit.SelfInvulnerable = false;
+                Assert.True(filter.ValidateHitShip(hit, f.Ship, 0, hit));
+                Assert.True(players.ContainsKey(1)); // Original fallback retains its native state-creation semantics.
+                players.Remove(1);
+            }
+            finally { f.World.Remove(body); }
+        }
+        using (var scope = new Scope(f))
+        {
+            BeamTargetMemo.Invoke(f.Receiver, true, f.Native);
+            players.Remove(0);
+            _ = forward.Invoke(null, [filter, f.Part, HitEffectFlags.None, false]);
+            Assert.True(scope.Query.Value.Invalid); Assert.Empty(players);
+        }
     }
 
     private static void NativeNullAndScopeGating(Setup f)

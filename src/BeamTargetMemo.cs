@@ -480,7 +480,7 @@ internal static class BeamTargetMemo
         if (!Exact<TargetManager>(provider.ExplicitTargets)) return false;
         List<WeaponTarget> targets = provider.ExplicitTargets._targets;
         if (!Exact<List<WeaponTarget>>(targets) || targets.Count > 32) return false;
-        if (!SafeFilter(provider.Rules.ProhibitTargetPartsFilter) || !SafeFilter(receiver.Rules.SecondaryFilter)) return false;
+        if (!SafeFilter(provider.Rules.ProhibitTargetPartsFilter) || !SafeScopedFilter(q, receiver.Rules.SecondaryFilter)) return false;
         foreach (WeaponTarget candidate in CollectionsMarshal.AsSpan(targets))
         {
             if (!Exact<WeaponTarget>(candidate)) return false;
@@ -545,11 +545,26 @@ internal static class BeamTargetMemo
     }
     private static bool SafeSet(HashSet<ID<PartCategory>>? set) => set == null ||
         (set.GetType() == typeof(HashSet<ID<PartCategory>>) && ReferenceEquals(set.Comparer, EqualityComparer<ID<PartCategory>>.Default));
-    private static bool SafeFilter(EffectFilter? filter) => filter == null || (filter.GetType() == typeof(EffectFilter) &&
-        filter.IgnoreInvulnerability && filter.Friendlies.HasValue && filter.Enemies.HasValue && filter.Neutrals.HasValue && filter.Junk.HasValue &&
+    private static bool SafeFilter([NotNullWhen(false)] EffectFilter? filter) => filter == null || (SafeFilterShape(filter) &&
+        filter.IgnoreInvulnerability && filter.Friendlies.HasValue && filter.Enemies.HasValue && filter.Neutrals.HasValue && filter.Junk.HasValue);
+    private static bool SafeFilterShape(EffectFilter filter) => filter.GetType() == typeof(EffectFilter) &&
         filter.OnlyStatuses is null or { Length: 0 } && filter.ExcludeStatuses is null or { Length: 0 } &&
-        SafeSet(filter.OnlyPartCategories) && SafeSet(filter.ExcludePartCategories));
-    private static bool SafePart(Part? part) => Exact<Part>(part) && Exact<PartRules>(part.Rules) &&
+        SafeSet(filter.OnlyPartCategories) && SafeSet(filter.ExcludePartCategories);
+    private static bool SafeScopedFilter(Query q, EffectFilter? filter)
+    {
+        if (SafeFilter(filter)) return true;
+        BeamEmitter? receiver = q.Receiver;
+        // Only this live secondary filter may use the native Creative invulnerability/allegiance closure.
+        // Its player lookups are read-only only while every referenced player already exists.
+        return Ready && !q.Value.Invalid && ReferenceEquals(_query, q) && Exact<BeamEmitter>(receiver) &&
+            ReferenceEquals(receiver._getTargetFrom, q.Provider) &&
+            ReferenceEquals(filter, receiver.Rules.SecondaryFilter) && SafeFilterShape(filter) &&
+            Exact<SimRoot>(q.Sim) && Owned(q.Sim) && Exact<GameRoot>(q.Sim.Game) &&
+            Exact<CreativeSimModeManager>(q.Sim.Mode) && Exact<CreativeGameModeManager>(q.Sim.Game.Mode) &&
+            Exact<Part>(receiver.Part) && ReferenceEquals(_emitting?.Ship, receiver.Part.Ship) && SafeShip(q, receiver.Part.Ship) &&
+            (q.Sim.CurrentActionSourcePlayer is not { } source || ExistingPlayer(q.Sim.Game, source.PlayerId, out _));
+    }
+    private static bool SafePart([NotNullWhen(true)] Part? part) => Exact<Part>(part) && Exact<PartRules>(part.Rules) &&
         Exact<HashSet<ID<PartCategory>>>(part.Rules.TypeCategories) && SafeSet(part.Rules.TypeCategories);
 
     private static void InspectFixture(Fixture fixture)
@@ -562,7 +577,7 @@ internal static class BeamTargetMemo
             Type shape = fixture.Shape.GetType();
             if (shape != typeof(PolygonShape) && shape != typeof(CircleShape) && shape != typeof(EdgeShape)) { InvalidateAll(); return; }
             var ship = (Ship)fixture.Body.UserData;
-            if (!SafeShip(q, ship) || !Exact<ShipPhysics>(ship.Physics)) { InvalidateAll(); return; }
+            if (!SafeScopedFilter(q, q.Receiver!.Rules.SecondaryFilter) || !SafeShip(q, ship) || !Exact<ShipPhysics>(ship.Physics)) { InvalidateAll(); return; }
             Type? info = fixture.UserData?.GetType();
             if (info != typeof(ShipPhysics.CellsFixtureInfo) && info != typeof(ShipPhysics.CustomFixtureInfo)) { InvalidateAll(); return; }
             var cells = ship.Parts._partsByCell;
@@ -575,7 +590,11 @@ internal static class BeamTargetMemo
     {
         if (_query != null && !_query.Value.Invalid)
         {
-            try { if (!SafeFilter(filter) || !SafePart(part)) InvalidateAll(); }
+            try
+            {
+                if (!SafeScopedFilter(_query, filter) || !SafePart(part) ||
+                    (!SafeFilter(filter) && !SafeShip(_query, part.Ship))) InvalidateAll();
+            }
             catch { InvalidateAll(); }
         }
         return filter.ValidateHitPart(part, flags, isDetachedPartValid);
