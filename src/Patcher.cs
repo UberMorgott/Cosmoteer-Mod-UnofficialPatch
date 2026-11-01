@@ -49,6 +49,7 @@ internal static class Patcher
         .. NebulaTempList.Patches,
         .. StatusTempDispose.Patches,
         .. BoundingPoints.Patches,
+        .. HullRemovalSkip.Patches,
         (PlayerMoney.Target, typeof(PlayerMoney)),
         (PlayerMoneyFlush.Target, typeof(PlayerMoneyFlush)),
         .. MissionTrade.Targets.Select(t => ((MethodBase)t.Target, typeof(MissionTrade))),
