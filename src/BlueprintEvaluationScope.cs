@@ -18,7 +18,11 @@ internal static class BlueprintEvaluationScope
     public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions) =>
         Patcher.RequireIl(instructions, "D3FBBDF29E3451CE39E664B66C8EDAED0A72BF230AE67B1294300DAFB3C755F2", "Director.DoUpdate");
 
-    public static void Prefix() => BlueprintToggleEvaluation.BeginValidatedUpdate();
+    public static void Prefix()
+    {
+        Patcher.ApplyRetargetFallback(); // before the update interval: may unpatch, or throw (fatal) so the update never runs
+        BlueprintToggleEvaluation.BeginValidatedUpdate();
+    }
 
     public static Exception? Finalizer(Exception? __exception)
     {

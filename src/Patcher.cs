@@ -48,6 +48,7 @@ internal static class Patcher
         .. GlowQuantize.Patches,
         .. NebulaTempList.Patches,
         .. StatusTempDispose.Patches,
+        .. BoundingPoints.Patches,
         (PlayerMoney.Target, typeof(PlayerMoney)),
         (PlayerMoneyFlush.Target, typeof(PlayerMoneyFlush)),
         .. MissionTrade.Targets.Select(t => ((MethodBase)t.Target, typeof(MissionTrade))),
@@ -62,9 +63,15 @@ internal static class Patcher
     {
         var sw = Stopwatch.StartNew();
         var harmony = new Harmony(HarmonyId);
+        string? retargetError = null;
         try
         {
-            var patches = Patches.Select(p => (p.Target, p.Patch, Inliners: FindR2RInliners(p.Target))).ToList(); // pure read, before anything is patched
+            // Shared generic targets only stay patched after tier-up with the retarget listener; without it they stay vanilla.
+            List<MethodBase> shared = Patches.Select(p => p.Target).Where(SharedGenericRetarget.IsShared).Distinct().ToList();
+            bool retarget = shared.Count == 0 || SharedGenericRetarget.Enable(shared, out retargetError);
+            if (!retarget) Log.Info($"{retargetError}; shared generic patches inactive: " + string.Join(", ", shared.Select(t => t.DeclaringType?.Name + "." + t.Name)));
+            var patches = Patches.Where(p => retarget || !SharedGenericRetarget.IsShared(p.Target))
+                .Select(p => (p.Target, p.Patch, Inliners: FindR2RInliners(p.Target))).ToList(); // pure read, before anything is patched
             var rejit = new HarmonyMethod(AccessTools.Method(typeof(Patcher), nameof(Rejit)));
             int inlinerCount = 0;
             foreach ((MethodBase target, Type patch, List<MethodBase> inliners) in patches)
@@ -113,6 +120,8 @@ internal static class Patcher
         ParallelIdleParking.Disable();
         AtlasRangeUpload.Disable();
         GlowQuantize.Disable();
+        // Before unpatching: no compile callback may forward a detour that is being removed.
+        if (!SharedGenericRetarget.Disable()) Log.Info("Performance: shared generic retarget listener could not be removed (inert).");
         try
         {
             unpatchAll();
@@ -128,6 +137,42 @@ internal static class Patcher
         }
     }
 
+    /// <summary>Test seam for the per-family unpatch of <see cref="ApplyRetargetFallback"/>.</summary>
+    private static Action<MethodBase>? _unpatchFamilyOverride;
+
+    internal static void OverrideUnpatchFamily(Action<MethodBase>? unpatch) => _unpatchFamilyOverride = unpatch;
+
+    /// <summary>
+    /// Called once per frame before the update (<see cref="BlueprintEvaluationScope"/>), never from a JIT callback: removes this
+    /// mod's patch from every shared generic target whose recompiled body could not be retargeted (alias or failure), so it runs
+    /// vanilla consistently. These are performance-only patches, so removing them keeps sim results identical. If a removal
+    /// fails, the remaining failed families are still removed (best effort) and the frame fails through the game's own fatal
+    /// path (exception out of Director.DoUpdate → GenericApp.OnUnhandledException: crash log, error dialog, exit). No full
+    /// rollback: that would drop the multiplayer desync fixes mid-session and the peers would run different rules.
+    /// </summary>
+    internal static void ApplyRetargetFallback()
+    {
+        if (!SharedGenericRetarget.Failed) return;
+        Action<MethodBase> unpatch = _unpatchFamilyOverride ?? (target => new Harmony(HarmonyId).Unpatch(target, HarmonyPatchType.All, HarmonyId));
+        List<Exception>? errors = null;
+        foreach (MethodBase target in SharedGenericRetarget.TakeFailed())
+        {
+            try
+            {
+                unpatch(target);
+                Log.Info($"Shared generic patch {target.DeclaringType?.Name}.{target.Name} could not follow recompilation (another detour on the same code); unpatched, runs vanilla.");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("retarget-fallback", ex);
+                (errors ??= []).Add(ex);
+            }
+        }
+        if (errors == null) return;
+        if (!SharedGenericRetarget.Disable()) Log.Info("Performance: shared generic retarget listener could not be removed (inert).");
+        Log.Info("Performance FATAL: a shared generic patch could not be removed after recompilation; stopping the game.");
+        throw new InvalidOperationException("Performance mod: failed to remove a shared generic patch that no longer intercepts its recompiled code", new AggregateException(errors));
+    }
     /// <summary>Unchanged IL: patching alone recompiles the method without its stale inlined copy.</summary>
     public static IEnumerable<CodeInstruction> Rejit(IEnumerable<CodeInstruction> instructions) => instructions;
 
