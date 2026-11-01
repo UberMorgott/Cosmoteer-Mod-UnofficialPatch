@@ -476,7 +476,10 @@ internal static class BeamTargetMemo
 
     // No geometry, target, filter, modifier or custom-comparer callback is invoked by the pre-call guard.
     // Known auto-property readers below are covered by the exact engine file pins and foreign-module guard.
-    internal static bool PureBefore(Query q)
+    internal static bool PureBefore(Query q) => PureBefore(q, secondaryFilter: true);
+    /// <param name="q">The query whose receiver, provider, sim and world are checked.</param>
+    /// <param name="secondaryFilter">False: vet only the target getter graph (GetShipTarget/GetFireTarget), not the secondary filter callback.</param>
+    internal static bool PureBefore(Query q, bool secondaryFilter)
     {
         q.RelevantCount = 0;
         BeamEmitter? receiver = q.Receiver;
@@ -504,7 +507,7 @@ internal static class BeamTargetMemo
         if (!Exact<TargetManager>(provider.ExplicitTargets)) return false;
         List<WeaponTarget> targets = provider.ExplicitTargets._targets;
         if (!Exact<List<WeaponTarget>>(targets) || targets.Count > 32) return false;
-        if (!SafeFilter(provider.Rules.ProhibitTargetPartsFilter) || !SafeScopedFilter(q, receiver.Rules.SecondaryFilter)) return false;
+        if (!SafeFilter(provider.Rules.ProhibitTargetPartsFilter) || (secondaryFilter && !SafeScopedFilter(q, receiver.Rules.SecondaryFilter))) return false;
         foreach (WeaponTarget candidate in CollectionsMarshal.AsSpan(targets))
         {
             if (!Exact<WeaponTarget>(candidate)) return false;
