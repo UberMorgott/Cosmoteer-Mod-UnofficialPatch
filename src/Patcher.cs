@@ -53,6 +53,7 @@ internal static class Patcher
         .. BoundingPoints.Patches,
         .. HullRemovalSkip.Patches,
         .. DecalLookup.Patches,
+        .. SpCatchUp.Patches,
         (PlayerMoney.Target, typeof(PlayerMoney)),
         (PlayerMoneyFlush.Target, typeof(PlayerMoneyFlush)),
         .. MissionTrade.Targets.Select(t => ((MethodBase)t.Target, typeof(MissionTrade))),
