@@ -39,6 +39,7 @@ internal static class Patcher
         .. RaycastScratch.Patches,
         .. BeamTargetMemo.Patches,
         .. BeamParallel.Patches,
+        .. BeamFrozen.Patches,
         (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
         (MapNodeText.Target, typeof(MapNodeText)),
         (MusicSeek.Target, typeof(MusicSeek)),
@@ -99,6 +100,7 @@ internal static class Patcher
             if (RaycastScratch.Requested) _ = RaycastScratch.Initialize();
             if (BeamTargetMemo.Requested) _ = BeamTargetMemo.Initialize();
             if (BeamParallel.Requested) _ = BeamParallel.Initialize();
+            if (BeamFrozen.Requested) _ = BeamFrozen.Initialize();
             if (GlowQuantize.Requested) _ = GlowQuantize.Initialize();
             // Diagnostic getter guards: installed apart from Patches (no R2R inliner rejit, skip instead of rollback).
             if (ViewDetect.Requested) _ = ViewDetect.Initialize(harmony);
@@ -125,6 +127,7 @@ internal static class Patcher
         SmoothedActiveSet.Disable();
         BeamTargetMemo.Disable();
         BeamParallel.Disable();
+        BeamFrozen.Disable();
         RaycastScratch.Disable();
         CullCadence.Disable();
         ParallelIdleParking.Disable();

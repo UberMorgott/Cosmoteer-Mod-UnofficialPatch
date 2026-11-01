@@ -98,13 +98,13 @@ internal static class BeamParallel
     internal static readonly MethodInfo AttenuateTarget = AccessTools.Method(typeof(BulletVolumeHit), "AttenuateBeam");
     internal static readonly MethodInfo DieTarget = AccessTools.Method(typeof(BaseBulletDeath), "Die");
     internal static readonly MethodInfo EffectTarget = AccessTools.Method(typeof(MultiHitEffectRules), "DoEffect", [typeof(HitEffectParams)]);
-    private static readonly MethodInfo EmitBeamsMethod = AccessTools.Method(typeof(WeaponManager), "EmitBeams");
+    internal static readonly MethodInfo EmitBeamsMethod = AccessTools.Method(typeof(WeaponManager), "EmitBeams");
     private static readonly MethodInfo NativeValidateHit = AccessTools.Method(typeof(BeamEmitter), "ValidateHit");
     private static readonly MethodInfo MultiValueListener = AccessTools.Method(typeof(PartMultiValue), "OnValueChanged");
     private static readonly MethodInfo ProxyListener = AccessTools.Method(typeof(BeamEmitterProxy), "OnEmitterValueChanged");
     private static readonly FieldInfo ValueChangedField = AccessTools.Field(typeof(BeamEmitter), "e_valueChanged");
-    private static readonly AccessTools.FieldRef<BeamEmitter, EventHandler<EventArgs>?> BeamValueChanged = AccessTools.FieldRefAccess<BeamEmitter, EventHandler<EventArgs>?>("e_valueChanged");
-    private static readonly AccessTools.FieldRef<BeamEmitter, EventHandler<TriggerEventArgs>?> BeamTrigger = AccessTools.FieldRefAccess<BeamEmitter, EventHandler<TriggerEventArgs>?>("HitIntervalElapsed");
+    internal static readonly AccessTools.FieldRef<BeamEmitter, EventHandler<EventArgs>?> BeamValueChanged = AccessTools.FieldRefAccess<BeamEmitter, EventHandler<EventArgs>?>("e_valueChanged");
+    internal static readonly AccessTools.FieldRef<BeamEmitter, EventHandler<TriggerEventArgs>?> BeamTrigger = AccessTools.FieldRefAccess<BeamEmitter, EventHandler<TriggerEventArgs>?>("HitIntervalElapsed");
     private static readonly AccessTools.FieldRef<PartMultiValue, EventHandler<EventArgs>?> MultiValueChanged = AccessTools.FieldRefAccess<PartMultiValue, EventHandler<EventArgs>?>("ValueChanged");
     private static readonly AccessTools.FieldRef<BeamEmitterProxy, EventHandler<EventArgs>?> ProxyValueChanged = AccessTools.FieldRefAccess<BeamEmitterProxy, EventHandler<EventArgs>?>("ValueChanged");
     private static readonly ID<PartRules> PrismPart = new("cosmoteer.ion_beam_prism");
@@ -219,7 +219,7 @@ internal static class BeamParallel
                 throw new NotSupportedException("Beam parallel hook coverage missing: " + target.DeclaringType?.Name + "." + target.Name);
         }
     }
-    private static bool Compatible(out string? error)
+    internal static bool Compatible(out string? error)
     {
         try
         {
@@ -318,7 +318,7 @@ internal static class BeamParallel
 
     internal enum Outcome : byte { Pending, Ready, Native, Attenuates }
 
-    internal sealed class Record
+    internal class Record
     {
         internal BeamEmitter Emitter = null!;
         internal BeamEmitterRules Rules = null!;
@@ -354,6 +354,9 @@ internal static class BeamParallel
         internal string? Reason;
         internal long QueryTicks;
         internal bool Taken;
+        // Frozen mode (BeamFrozen): the BE:1235 attenuation the query met, applied serially in the apply phase.
+        internal IBeamAttenuator? Attenuator;
+        internal Segment AttenuationSegment;
     }
 
     internal sealed class Session
@@ -695,7 +698,7 @@ internal static class BeamParallel
     }
 
     /// <summary>Native lines 1055-1079 without the offset draw (read-only on the main thread).</summary>
-    private static bool Lines1055To1079(BeamEmitter beam, V worldSpawnLoc, Direction worldSpawnDir, float effectsScale,
+    internal static bool Lines1055To1079(BeamEmitter beam, V worldSpawnLoc, Direction worldSpawnDir, float effectsScale,
         out float currentRange, out float infoLength, out V spawnDirVector, out V endPoint, out V worldOrigin, out Circle? offset)
     {
         BeamEmitterRules rules = beam.Rules;
@@ -724,7 +727,7 @@ internal static class BeamParallel
     }
 
     /// <summary>Values the native query reads from rules, targets and the sim while it runs (main thread).</summary>
-    private static bool ReadQueryValues(BeamEmitter beam, float effectsScale, out float range, out float? secondaryWidth, out Ship? target,
+    internal static bool ReadQueryValues(BeamEmitter beam, float effectsScale, out float range, out float? secondaryWidth, out Ship? target,
         out ActionSourcePlayer? source, out int sourcePlayer, out int shipPlayer, out int maxPenetrations)
     {
         BeamEmitterRules rules = beam.Rules;
@@ -739,7 +742,7 @@ internal static class BeamParallel
     }
 
     /// <summary>Exact audited shapes of everything the worker query reads that is fixed per beam.</summary>
-    private static bool StaticEligible(BeamEmitter beam, [NotNullWhen(false)] out string? why)
+    internal static bool StaticEligible(BeamEmitter beam, [NotNullWhen(false)] out string? why)
     {
         BeamEmitterRules rules = beam.Rules;
         why = null;
@@ -758,7 +761,7 @@ internal static class BeamParallel
         callback is { HasSingleTarget: true } && ReferenceEquals(callback.Target, target) && SameMethod(callback.Method, method);
     private static bool SafeSet(HashSet<ID<PartCategory>>? set) => set == null ||
         (set.GetType() == typeof(HashSet<ID<PartCategory>>) && ReferenceEquals(set.Comparer, EqualityComparer<ID<PartCategory>>.Default));
-    private static bool SafeFilter(EffectFilter? filter) => filter != null && filter.GetType() == typeof(EffectFilter) &&
+    internal static bool SafeFilter(EffectFilter? filter) => filter != null && filter.GetType() == typeof(EffectFilter) &&
         filter.OnlyStatuses is null or { Length: 0 } && filter.ExcludeStatuses is null or { Length: 0 } &&
         filter.OnlyBulletCategories == null && filter.ExcludeBulletCategories == null &&
         SafeSet(filter.OnlyPartCategories) && SafeSet(filter.ExcludePartCategories);
@@ -1018,23 +1021,45 @@ internal static class BeamParallel
     // ---------------------------------------------------------------------------------------------------------------------
     // Worker query (any thread). Reads frozen state only; writes only its record and its own thread's context.
 
-    internal static void Run(Record r)
+    internal static void Run(Record r) => Run(r, frozen: false);
+
+    /// <summary>Guarded worker run. <paramref name="frozen"/>: an attenuation is recorded on the record (BeamFrozen) instead of stopping.</summary>
+    internal static void Run(Record r, bool frozen)
     {
         long start = Stopwatch.GetTimestamp();
         Ctx c = Ctx.Current;
         try
         {
-            c.Rec = r; c.Abort = null;
+            c.Rec = r; c.Abort = null; c.Frozen = frozen; r.Attenuator = null;
             r.Outcome = c.Query(out r.Info);
-            if (r.Outcome != Outcome.Ready) { r.Reason = c.Abort ?? r.Reason; r.Info.Dispose(); r.Info = default; }
+            if (r.Outcome != Outcome.Ready) { r.Reason = c.Abort ?? r.Reason; r.Info.Dispose(); r.Info = default; r.Attenuator = null; }
         }
         catch (Exception ex)
         {
-            r.Info.Dispose(); r.Info = default;
+            r.Info.Dispose(); r.Info = default; r.Attenuator = null;
             r.Outcome = Outcome.Native; r.Reason = "exception " + ex.GetType().Name;
         }
         finally { c.Release(); } // no scene object stays reachable from worker thread-local state
         r.QueryTicks = Stopwatch.GetTimestamp() - start;
+    }
+
+    /// <summary>
+    /// BeamFrozen serial query (main thread only, after the worker join): the same query with every worker guard off, so unknown
+    /// shapes, filters, crew types, cold shield caches and missing players take the native paths. Exceptions propagate as native ones.
+    /// </summary>
+    internal static void RunSerial(Record r)
+    {
+        long start = Stopwatch.GetTimestamp();
+        Ctx c = Ctx.Current;
+        r.Info.Dispose(); r.Info = default; r.Attenuator = null;
+        try
+        {
+            c.Rec = r; c.Abort = null; c.Frozen = true; c.Serial = true;
+            r.Outcome = c.Query(out r.Info);
+            if (r.Outcome != Outcome.Ready) throw new InvalidOperationException("Beam frozen serial query stopped: " + c.Abort);
+        }
+        finally { c.Release(); }
+        r.QueryTicks += Stopwatch.GetTimestamp() - start;
     }
 
     internal sealed class Ctx
@@ -1043,16 +1068,27 @@ internal static class BeamParallel
         internal static Ctx Current => _current ??= new Ctx();
         internal Record Rec = null!;
         internal string? Abort;
+        /// <summary>BeamFrozen: record the BE:1235 attenuation and continue as native instead of stopping.</summary>
+        internal bool Frozen;
+        /// <summary>BeamFrozen serial path (main thread): no worker guard; unknown objects take the native paths.</summary>
+        internal bool Serial;
         private readonly Func<RayCastInput, Category, int, object, float> _broad, _fixturePhase;
+        private readonly Func<Fixture, V, bool> _pointTest;
         private bool _data;
         private Fixture? _hitFixture;
         private V _hitPoint, _hitNormal;
         private HitObject _hitData;
-        private Ctx() { _broad = Broad; _fixturePhase = FixturePhase; }
+        private Ctx() { _broad = Broad; _fixturePhase = FixturePhase; _pointTest = PointTest; }
 
         /// <summary>The first stop reason wins; the record then runs natively and invalidates every later record.</summary>
         private float Fail(string reason) { Abort ??= reason; return 0f; }
-        internal void Release() { Rec = null!; Abort = null; _hitFixture = null; _hitData = default; _hitPoint = default; _hitNormal = default; }
+        internal void Release() { Rec = null!; Abort = null; Frozen = false; Serial = false; _hitFixture = null; _hitData = default; _hitPoint = default; _hitNormal = default; }
+        /// <summary>BeamEmitter.ValidatePointTest (BE:1369-1377).</summary>
+        private bool PointTest(Fixture fixture, V worldPoint)
+        {
+            NV point = worldPoint;
+            return fixture.TestPoint(ref point) && ValidateHit(fixture, worldPoint);
+        }
         internal bool Holds => RuntimeType(Rec) != null || _hitFixture != null || _hitData.Part != null || _hitData.Shield != null || _hitData.Collider != null || _hitData.Crew != null || _hitData.Attenuator != null;
         private static bool ShapeOk(Fixture? fixture)
         {
@@ -1068,7 +1104,7 @@ internal static class BeamParallel
             if (proxy.Fixture != null)
             {
                 Fixture fixture = proxy.Fixture;
-                if (!ShapeOk(fixture) || fixture.Body?.GetType() != typeof(Body)) return Fail("shape");
+                if (!Serial && (!ShapeOk(fixture) || fixture.Body?.GetType() != typeof(Body))) return Fail("shape");
                 int childIndex = proxy.ChildIndex;
                 if (fixture.RayCast(out RayCastOutput output, ref rayCastInput, childIndex))
                 {
@@ -1079,10 +1115,10 @@ internal static class BeamParallel
                 return rayCastInput.MaxFraction;
             }
             Body body = proxy.Body;
-            if (body?.GetType() != typeof(Body) || body.FixtureTree?.GetType() != typeof(DynamicTree<BodyFixtureProxy>)) return Fail("body tree");
+            if (!Serial && (body?.GetType() != typeof(Body) || body.FixtureTree?.GetType() != typeof(DynamicTree<BodyFixtureProxy>))) return Fail("body tree");
             rayCastInput.Point1 = Transform.Divide(rayCastInput.Point1, ref body._xf);
             rayCastInput.Point2 = Transform.Divide(rayCastInput.Point2, ref body._xf);
-            body.FixtureTree.RayCast(_fixturePhase, ref rayCastInput, categories, out float maxFraction, body);
+            body.FixtureTree!.RayCast(_fixturePhase, ref rayCastInput, categories, out float maxFraction, body);
             return maxFraction;
         }
 
@@ -1093,7 +1129,7 @@ internal static class BeamParallel
             Body body = (Body)userData;
             BodyFixtureProxy userData2 = body.FixtureTree!.GetUserData(proxyId);
             Fixture fixture = userData2.Fixture;
-            if (!ShapeOk(fixture)) return Fail("shape");
+            if (!Serial && !ShapeOk(fixture)) return Fail("shape");
             int childIndex = userData2.ChildIndex;
             Transform transform = Transform.Identity;
             if (fixture.Shape.RayCast(out RayCastOutput output, ref rayCastInput, ref transform, childIndex))
@@ -1145,8 +1181,8 @@ internal static class BeamParallel
 
         // --- BeamEmitter.cs:1426-1541 with per-record spawn point, target and source player -------------------------
 
-        private bool ShipOk(Ship? ship) => RuntimeType(ship) == typeof(Ship) && RuntimeType(ship!.Metadata) != null && RuntimeType(ship.Physics) == typeof(ShipPhysics) &&
-            PlayerKnown(Rec.Sim, ship.Metadata.PlayerIndex);
+        private bool ShipOk(Ship? ship) => Serial || (RuntimeType(ship) == typeof(Ship) && RuntimeType(ship!.Metadata) != null && RuntimeType(ship.Physics) == typeof(ShipPhysics) &&
+            PlayerKnown(Rec.Sim, ship.Metadata.PlayerIndex));
         /// <summary>
         /// ValidateShieldHit reads ArcAngle/ArcRadius (lazy caches, ArcShield.cs:143-171) and the chained RulesLocation/RulesRotation
         /// (lazy caches, ChainablePartComponent.cs:46-76). A cold cache would be written on a worker: that beam runs natively.
@@ -1154,7 +1190,7 @@ internal static class BeamParallel
         internal static bool ShieldWarm(ArcShield shield) => shield._cachedArcAngle.HasValue && shield._cachedArcRadius.HasValue && shield._hasRulesLoc && shield._hasRulesRot;
         private void StopShield(ArcShield shield) => Fail(shield.GetType() == typeof(ArcShield) && !ShieldWarm(shield) ? "cold shield" : "shield");
         private void StopShip(Ship? ship) => Fail(RuntimeType(ship) == typeof(Ship) ? "player" : "hit ship");
-        private bool ShieldOk(ArcShield shield) => shield.GetType() == typeof(ArcShield) && ShieldWarm(shield) && (shield.Ship == null || ShipOk(shield.Ship));
+        private bool ShieldOk(ArcShield shield) => Serial || (shield.GetType() == typeof(ArcShield) && ShieldWarm(shield) && (shield.Ship == null || ShipOk(shield.Ship)));
 
         /// <summary>
         /// Everything EffectFilter.ValidateHitCrew (EffectFilter.cs:444-467) reads before the native call, in its branch order:
@@ -1166,6 +1202,7 @@ internal static class BeamParallel
         /// </summary>
         private string? CrewStop(SpaceCrew crew, EffectFilter? filter)
         {
+            if (Serial) return null;
             if (RuntimeType(crew) != typeof(SpaceCrew)) return "crew type";
             if (RuntimeType(filter) != typeof(EffectFilter)) return "crew filter";
             SimRoot? sim = crew.Sim;
@@ -1204,16 +1241,17 @@ internal static class BeamParallel
             {
                 if (!(userData is SpaceCrew))
                 {
-                    if (userData is BulletData bulletData && bulletData.GetType() == typeof(BulletData))
+                    if (userData is BulletData bulletData && (Serial || bulletData.GetType() == typeof(BulletData)))
                     {
                         if (bulletData.BeamAttenuator is BulletComponent bulletComponent)
                         {
-                            if (bulletComponent.GetType() != typeof(BulletVolumeHit) || !BulletOk(bulletComponent.Bullet)) { Fail("bullet"); return false; }
+                            if (!Serial && (bulletComponent.GetType() != typeof(BulletVolumeHit) || !BulletOk(bulletComponent.Bullet))) { Fail("bullet"); return false; }
                             return r.Rules.AttenuatorCollisions.ValidateHitBullet(bulletComponent.Bullet, r.Ship);
                         }
-                        if (bulletData.BeamAttenuator != null) { Fail("attenuator"); return false; }
+                        if (!Serial && bulletData.BeamAttenuator != null) { Fail("attenuator"); return false; }
                         return true;
                     }
+                    if (Serial) throw new NotSupportedException(); // BE:1449
                     Fail("user data"); // native throws NotSupportedException
                     return false;
                 }
@@ -1288,6 +1326,7 @@ internal static class BeamParallel
                     }
                     return (true, new HitObject(hitPart, hitCollider, null, null, null));
                 }
+                if (Serial) throw new NotSupportedException(); // BE:1524
                 Fail("user data"); // native throws NotSupportedException
                 return (false, default);
             }
@@ -1349,7 +1388,7 @@ internal static class BeamParallel
             return ((_hitFixture, _hitPoint, _hitNormal), _hitData);
         }
 
-        // --- BeamEmitter.cs:1082-1353 (GetHitInfo after line 1081; the overlap test branch is ineligible) -----------
+        // --- BeamEmitter.cs:1082-1353 (GetHitInfo after line 1081; the overlap test branch runs in Serial mode only) ---
 
         internal Outcome Query(out HitInfo info)
         {
@@ -1361,6 +1400,25 @@ internal static class BeamParallel
             V spawnDirVector = r.SpawnDirVector;
             V worldOrigin = r.WorldOrigin;
             info = new HitInfo { Length = r.InfoLength, EndPoint = r.EndPoint };
+            if (rules.ColliderOverlapTest)
+            {
+                // BE:1082-1095 (BeamFrozen serial path only: TestPointFirst uses PhysicsExtensions' static scratch).
+                if (!Serial) { Fail("collider overlap test"); return Outcome.Native; }
+                Category pointCategory = Category.Cat2 | Category.Cat9;
+                if (rules.CrewCollisions.AffectsCrew) pointCategory |= Category.Cat10;
+                if (rules.AttenuationLimit != null) pointCategory |= Category.Cat12;
+                Fixture? pointHit = r.World.TestPointFirst(worldSpawnLoc, pointCategory, _pointTest);
+                if (pointHit != null)
+                {
+                    info.Operational.WorldPoint = worldSpawnLoc;
+                    info.Operational.WorldNormal = -spawnDirVector;
+                    info.Length = 0f;
+                    info.EndPoint = worldSpawnLoc;
+                    if (_SetOperationalAttenuationInfo(pointHit)) return Outcome.Attenuates;
+                    info.Operational.Hit = _GetOperationalHitObject(0f, worldSpawnLoc, pointHit);
+                    return Outcome.Ready;
+                }
+            }
             float radius2 = rules.Width / 2f;
             (Fixture? Fixture, V WorldPoint, V WorldNormal) operationalRaycast = DoOperationalRaycast(worldOrigin, info.EndPoint, radius2);
             if (Abort != null) return Outcome.Native;
@@ -1448,7 +1506,7 @@ internal static class BeamParallel
                 if (fixture2.UserData is SpaceCrew spaceCrew)
                 {
                     // _ValidateHitObject reads SimNode.Sim and SimObject.UniqueID only (non-virtual).
-                    if (RuntimeType(spaceCrew) != typeof(SpaceCrew)) { Fail("crew type"); return default; }
+                    if (!Serial && RuntimeType(spaceCrew) != typeof(SpaceCrew)) { Fail("crew type"); return default; }
                     if (_ValidateHitObject(spaceCrew, distance)) return new HitObject(null, null, null, spaceCrew, null);
                 }
                 if (!(fixture2.Body?.UserData is Ship ship) || !_ValidateHitObject(ship, distance))
@@ -1503,9 +1561,15 @@ internal static class BeamParallel
                 info.Length = structuralDistance;
             }
             // True: the native code would attenuate a bullet here (line 1235); the record is never replayed.
+            // Frozen: the attenuation (attenuator, Segment(spawn, initialBeamEnd)) is recorded and the query continues as native;
+            // the attenuator HitObject set at BE:1236 is overwritten by the caller exactly as at BE:1092/1250.
             bool _SetOperationalAttenuationInfo(Fixture fixture2)
             {
-                return rules.AttenuationLimit != null && fixture2.Body?.UserData is BulletData bulletData && bulletData.BeamAttenuator != null;
+                if (rules.AttenuationLimit == null || fixture2.Body?.UserData is not BulletData bulletData || bulletData.BeamAttenuator == null) return false;
+                if (!Frozen) return true;
+                r.Attenuator = bulletData.BeamAttenuator;
+                r.AttenuationSegment = new Segment(in worldSpawnLoc, in r.EndPoint);
+                return false;
             }
             bool _SetOperationalInfo(ref HitInfo info, float distance)
             {
