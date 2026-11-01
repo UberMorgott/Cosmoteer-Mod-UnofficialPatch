@@ -46,6 +46,7 @@ internal static class Patcher
         (RoofOpacity.Target, typeof(RoofOpacity)),
         (MultiColorMax.Target, typeof(MultiColorMax)),
         .. GlowQuantize.Patches,
+        .. NebulaTempList.Patches,
         (PlayerMoney.Target, typeof(PlayerMoney)),
         (PlayerMoneyFlush.Target, typeof(PlayerMoneyFlush)),
         .. MissionTrade.Targets.Select(t => ((MethodBase)t.Target, typeof(MissionTrade))),
