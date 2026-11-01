@@ -45,6 +45,7 @@ internal static class Patcher
         .. ShaderConstantBoxing.Targets.Select(t => ((MethodBase)t, typeof(ShaderConstantBoxing))),
         (RoofOpacity.Target, typeof(RoofOpacity)),
         (MultiColorMax.Target, typeof(MultiColorMax)),
+        .. GlowQuantize.Patches,
         (PlayerMoney.Target, typeof(PlayerMoney)),
         (PlayerMoneyFlush.Target, typeof(PlayerMoneyFlush)),
         .. MissionTrade.Targets.Select(t => ((MethodBase)t.Target, typeof(MissionTrade))),
@@ -82,6 +83,7 @@ internal static class Patcher
             if (CullCadence.Requested) _ = CullCadence.Initialize();
             if (RaycastScratch.Requested) _ = RaycastScratch.Initialize();
             if (BeamTargetMemo.Requested) _ = BeamTargetMemo.Initialize();
+            if (GlowQuantize.Requested) _ = GlowQuantize.Initialize();
             Log.Info($"Patched {patches.Count} methods + {inlinerCount} R2R inliners in {sw.ElapsedMilliseconds} ms");
             return true;
         }
@@ -108,6 +110,7 @@ internal static class Patcher
         CullCadence.Disable();
         ParallelIdleParking.Disable();
         AtlasRangeUpload.Disable();
+        GlowQuantize.Disable();
         try
         {
             unpatchAll();

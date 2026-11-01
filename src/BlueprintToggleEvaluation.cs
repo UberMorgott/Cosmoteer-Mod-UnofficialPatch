@@ -34,7 +34,7 @@ internal static class BlueprintToggleEvaluation
     /// <summary>
     /// Opens the interval for this specialization and for <see cref="BlueprintToggleUpdates"/>, each only while no foreign
     /// Harmony owner patches one of its read dependencies. One pass over the patched methods serves both, and also opens
-    /// <see cref="SmoothedActiveSet"/>'s frame and refreshes <see cref="AtlasRangeUpload"/>'s foreign-owner state.
+    /// <see cref="SmoothedActiveSet"/>'s frame and refreshes <see cref="AtlasRangeUpload"/>'s and <see cref="GlowQuantize"/>'s foreign-owner state.
     /// </summary>
     public static void BeginValidatedUpdate()
     {
@@ -45,7 +45,8 @@ internal static class BlueprintToggleEvaluation
         bool skip = BlueprintToggleUpdates.Ready;
         bool smoothed = SmoothedActiveSet.Ready;
         bool atlas = AtlasRangeUpload.Ready;
-        if (!leaf && !skip && !smoothed && !atlas) return;
+        bool glow = GlowQuantize.Ready;
+        if (!leaf && !skip && !smoothed && !atlas && !glow) return;
         try
         {
             if (leaf && !_nativeValidated) ValidateNativeDependencies();
@@ -55,7 +56,7 @@ internal static class BlueprintToggleEvaluation
             _nativeRejected = true;
             Reject(ex.Message);
             leaf = false;
-            if (!skip && !smoothed && !atlas) return;
+            if (!skip && !smoothed && !atlas && !glow) return;
         }
         try
         {
@@ -66,7 +67,8 @@ internal static class BlueprintToggleEvaluation
                 bool skipDependency = skip && BlueprintToggleUpdates.IsDependency(patched);
                 bool smoothedDependency = smoothed && SmoothedActiveSet.IsDependency(patched);
                 bool atlasDependency = atlas && AtlasRangeUpload.IsDependency(patched);
-                if (!leafDependency && !skipDependency && !smoothedDependency && !atlasDependency) continue;
+                bool glowDependency = glow && GlowQuantize.IsDependency(patched);
+                if (!leafDependency && !skipDependency && !smoothedDependency && !atlasDependency && !glowDependency) continue;
                 Patches? patches = Harmony.GetPatchInfo(patched);
                 if (patches == null) throw new InvalidOperationException("Patch information disappeared for " + patched);
                 foreach (string owner in patches.Owners)
@@ -93,14 +95,20 @@ internal static class BlueprintToggleEvaluation
                         AtlasRangeUpload.SetForeign(reason);
                         atlas = false;
                     }
+                    if (glowDependency)
+                    {
+                        GlowQuantize.SetForeign(reason);
+                        glow = false;
+                    }
                     break;
                 }
-                if (!leaf && !skip && !smoothed && !atlas) return;
+                if (!leaf && !skip && !smoothed && !atlas && !glow) return;
             }
             _validatedUpdate = leaf;
             BlueprintToggleUpdates.BeginFrame(skip);
             SmoothedActiveSet.BeginFrame(smoothed);
             if (atlas) AtlasRangeUpload.SetForeign(null);
+            if (glow) GlowQuantize.SetForeign(null);
         }
         catch (Exception ex)
         {
@@ -112,6 +120,7 @@ internal static class BlueprintToggleEvaluation
             if (skip) BlueprintToggleUpdates.Reject(ex.Message);
             if (smoothed) SmoothedActiveSet.Reject(ex.Message);
             if (atlas) AtlasRangeUpload.SetForeign(ex.Message);
+            if (glow) GlowQuantize.SetForeign(ex.Message);
         }
     }
 
