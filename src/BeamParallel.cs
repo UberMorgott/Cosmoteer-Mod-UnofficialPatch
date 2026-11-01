@@ -17,6 +17,7 @@ using Cosmoteer.Crew;
 using Cosmoteer.Data;
 using Cosmoteer.Game;
 using Cosmoteer.Game.Multiplayer;
+using Cosmoteer.Modes;
 using Cosmoteer.Modes.Creative;
 using Cosmoteer.Ships;
 using Cosmoteer.Ships.Parts;
@@ -58,8 +59,9 @@ namespace Performance;
 /// <see cref="FastParallel"/> runs a handwritten copy of <c>BeamEmitter.GetHitInfo</c> lines 1082-1137 for every
 /// eligible record. Workers read only frozen sim state through audited code (own traversal wrappers that check the
 /// fixture shape before native Shape.RayCast, own copies of the hit callbacks using per-record spawn point, target and
-/// rule values), write nothing outside their record, and stop at any unaudited object (crew, unknown shape or user data,
-/// missing player state): that beam then runs natively.
+/// rule values), write nothing outside their record, and stop at any unaudited object (derived crew type, cold shield,
+/// unknown shape or user data, missing player state): that beam then runs natively. Exact SpaceCrew hits are handled
+/// (EffectFilter.ValidateHitCrew reads only frozen fields and known player states).
 /// <para/>
 /// Replay is the unchanged native loop. The GetHitInfo prefix recomputes lines 1055-1079 natively, compares every input
 /// bit for bit, consumes the native RNG draw, writes <c>_tempWorldSpawnLoc</c> and returns the record. Anything that can
@@ -86,7 +88,7 @@ internal static class BeamParallel
     private static readonly Guid HalflingMvid = new("29d04acb-ae49-4f3b-8499-f03c9144a3a9");
     private const string GameFileSha = "F9451FBED4A11396C816D3F44EBDD836E48BCE68BA6AEAE28C3E534E037207D4";
     private const string HalflingFileSha = "80213C7C8182CE63B9075A48DFD80A7614B1FA2AB3BCD16A69D5363CF9A4B391";
-    internal const string NativeIlSha256 = "E074FFD3732F21B148A78FF3DBE805682467661E8FB5E73C07E6ED263A090B7E";
+    internal const string NativeIlSha256 = "74B009B55234500C8D578D6CE3B55A289C1FD3E5DF8492387A75308F0DD166A5";
 
     private const BindingFlags All = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
     internal static readonly MethodInfo BucketTarget = AccessTools.Method(typeof(SceneRoot), "FixedUpdateForBucket", [typeof(int)]);
@@ -148,6 +150,20 @@ internal static class BeamParallel
             yield return M(occlusion, name);
         foreach (MethodInfo local in Locals(occlusion, "HandleOcclusionForLine").Concat(Locals(occlusion, "TryGetOccludingFixture"))) yield return local;
         yield return M(typeof(PartsManager.FixedUpdateCallbacks), "FixedUpdate");
+        // Crew hits (worker copy of the SpaceCrew branches; CrewStop mirrors the reads of ValidateHitCrew).
+        Type filter = typeof(EffectFilter);
+        yield return M(filter, "ValidateHitCrew");
+        yield return M(filter, "get_AffectsCrew");
+        foreach (MethodInfo m in filter.GetMethods(All).Where(m => m.Name == "ValidateAllegiance").OrderBy(m => m.MetadataToken)) yield return m;
+        yield return M(typeof(SimModeManager), "AreEnemies");
+        yield return M(typeof(SimModeManager), "CanDamage");
+        yield return M(typeof(CreativeSimModeManager), "CanDamage");
+        yield return M(typeof(Ship), "ExistsInSim");
+        yield return M(typeof(CrewSoul), "get_HomeShip");
+        yield return M(typeof(CrewSoul), "get_PlayerIndex");
+        yield return M(typeof(SpaceCrew), "get_Soul");
+        yield return M(typeof(SimNode), "get_Sim");
+        yield return M(typeof(SimObject), "get_UniqueID");
     }
 
     internal static bool Initialize()
@@ -1138,8 +1154,38 @@ internal static class BeamParallel
         internal static bool ShieldWarm(ArcShield shield) => shield._cachedArcAngle.HasValue && shield._cachedArcRadius.HasValue && shield._hasRulesLoc && shield._hasRulesRot;
         private void StopShield(ArcShield shield) => Fail(shield.GetType() == typeof(ArcShield) && !ShieldWarm(shield) ? "cold shield" : "shield");
         private void StopShip(Ship? ship) => Fail(RuntimeType(ship) == typeof(Ship) ? "player" : "hit ship");
-        private void StopCrew(object? crew) => Fail(RuntimeType(crew) == typeof(SpaceCrew) ? "crew" : "crew type");
         private bool ShieldOk(ArcShield shield) => shield.GetType() == typeof(ArcShield) && ShieldWarm(shield) && (shield.Ship == null || ShipOk(shield.Ship));
+
+        /// <summary>
+        /// Everything EffectFilter.ValidateHitCrew (EffectFilter.cs:444-467) reads before the native call, in its branch order:
+        /// crew.Sim, the Crew flag, Soul.HomeShip, HomeShip.ExistsInSim (Ship.cs:1387, Parts.Count), then either the ship
+        /// allegiance (ValidateAllegiance(Ship...), the same reads as a ship hit: ShipOk) or the player allegiance
+        /// (ValidateAllegiance(SimRoot...) :557-572: Mode.CanDamage/AreEnemies, which add a missing player state: PlayerKnown).
+        /// The source player of every caller is r.ShipPlayer or r.SourcePlayer, both checked at snapshot. Plain field and
+        /// auto-property reads only; derived crew, soul or filter types stop.
+        /// </summary>
+        private string? CrewStop(SpaceCrew crew, EffectFilter? filter)
+        {
+            if (RuntimeType(crew) != typeof(SpaceCrew)) return "crew type";
+            if (RuntimeType(filter) != typeof(EffectFilter)) return "crew filter";
+            SimRoot? sim = crew.Sim;
+            if (sim == null || !filter!.Crew) return null; // native returns false before any other read
+            if (!ReferenceEquals(sim, Rec.Sim) || RuntimeType(crew.Soul) != typeof(CrewSoul)) return "crew sim";
+            Ship? home = crew.Soul.HomeShip;
+            if (home != null)
+            {
+                if (RuntimeType(home) != typeof(Ship) || RuntimeType(home.Parts) != typeof(PartsManager)) return "crew home";
+                if (home.ExistsInSim(sim)) return ShipOk(home) ? null : "crew home";
+            }
+            return PlayerKnown(sim, crew.Soul.PlayerIndex) ? null : "crew player";
+        }
+        private bool CrewOk(SpaceCrew crew, EffectFilter? filter)
+        {
+            string? stop = CrewStop(crew, filter);
+            if (stop == null) return true;
+            Fail(stop);
+            return false;
+        }
 
         private bool ValidateHit(Fixture fixture, V worldPoint)
         {
@@ -1171,8 +1217,9 @@ internal static class BeamParallel
                     Fail("user data"); // native throws NotSupportedException
                     return false;
                 }
-                StopCrew(userData);
-                return false;
+                var hitCrew = (SpaceCrew)userData;
+                if (!CrewOk(hitCrew, r.Rules.CrewCollisions)) return false;
+                return r.Rules.CrewCollisions.ValidateHitCrew(hitCrew, r.Ship, null, r.ShipTarget);
             }
             if (!ShipOk(hitShip)) { StopShip(hitShip); return false; }
             return IsShipHitValid(hitShip, fixture);
@@ -1244,8 +1291,10 @@ internal static class BeamParallel
                 Fail("user data"); // native throws NotSupportedException
                 return (false, default);
             }
-            StopCrew(userData);
-            return (false, default);
+            var spaceCrew = (SpaceCrew)userData;
+            if (!CrewOk(spaceCrew, r.Rules.SecondaryFilter)) return (false, default);
+            bool flag2 = r.Rules.SecondaryFilter.ValidateHitCrew(spaceCrew, r.Ship, r.SourcePlayer, r.ShipTarget);
+            return (flag2, flag2 ? new HitObject(null, null, null, spaceCrew, null) : default);
             bool _FilterHitPart(Ship ship, [NotNullWhen(true)] out Part? reference, out BaseCollider? hitCollider2)
             {
                 reference = ship.Physics.GetContactPart(fixture, worldPoint, out hitCollider2);
@@ -1396,10 +1445,11 @@ internal static class BeamParallel
                 {
                     return default;
                 }
-                if (fixture2.UserData is SpaceCrew)
+                if (fixture2.UserData is SpaceCrew spaceCrew)
                 {
-                    StopCrew(fixture2.UserData);
-                    return default;
+                    // _ValidateHitObject reads SimNode.Sim and SimObject.UniqueID only (non-virtual).
+                    if (RuntimeType(spaceCrew) != typeof(SpaceCrew)) { Fail("crew type"); return default; }
+                    if (_ValidateHitObject(spaceCrew, distance)) return new HitObject(null, null, null, spaceCrew, null);
                 }
                 if (!(fixture2.Body?.UserData is Ship ship) || !_ValidateHitObject(ship, distance))
                 {
@@ -1439,7 +1489,11 @@ internal static class BeamParallel
                     if (!ShieldOk(hitObject.Shield)) { StopShield(hitObject.Shield); return false; }
                     return secondaryOverrideFilter.ValidateHitShield(hitObject.Shield, r.Ship, r.ShipPlayer, r.ShipTarget);
                 }
-                if (hitObject.Crew != null) StopCrew(hitObject.Crew);
+                if (hitObject.Crew != null)
+                {
+                    if (!CrewOk(hitObject.Crew, secondaryOverrideFilter)) return false;
+                    return secondaryOverrideFilter.ValidateHitCrew(hitObject.Crew, r.Ship, r.ShipPlayer, r.ShipTarget);
+                }
                 return false;
             }
             void _OverwriteInfoWithStructuralHit(ref HitInfo info)

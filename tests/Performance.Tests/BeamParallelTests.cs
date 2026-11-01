@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
+using Cosmoteer.Crew;
 using Cosmoteer.Data;
 using Cosmoteer.Game;
 using Cosmoteer.Game.Multiplayer;
@@ -90,7 +91,7 @@ public sealed class BeamParallelTests
     public static IEnumerable<object[]> Scenarios()
     {
         foreach (int workers in new[] { 1, 2, 8 })
-            foreach (string scenario in new[] { "operational", "structural-penetration", "structural-blocking", "secondary", "miss", "keep-length", "init-id", "anti-phasing", "fixture-proxies", "offset", "shield" })
+            foreach (string scenario in new[] { "operational", "structural-penetration", "structural-blocking", "secondary", "miss", "keep-length", "init-id", "anti-phasing", "fixture-proxies", "offset", "shield", "crew", "crew-homeless", "crew-friendly", "crew-behind", "crew-secondary" })
                 yield return [scenario, workers];
     }
 
@@ -124,6 +125,9 @@ public sealed class BeamParallelTests
                     case "keep-length": Assert.False(native.Operational.Hit.HasObject()); Assert.Equal(50f, native.Length); break;
                     case "shield": Assert.Same(f.Shield, native.Operational.Hit.Shield); break;
                     case "offset": Assert.NotNull(native.Structural.Part); break;
+                    case "crew" or "crew-homeless" or "crew-secondary": Assert.Same(f.Crew, native.Operational.Hit.Crew); Assert.Null(native.Operational.Hit.Part); break;
+                    case "crew-friendly": Assert.Null(native.Operational.Hit.Crew); Assert.NotNull(native.Operational.Hit.Part); break; // rejected crew: the ray passes on
+                    case "crew-behind": Assert.Same(f.Crew, native.Operational.Hit.Crew); Assert.NotNull(native.Structural.Part); Assert.NotEmpty(native.AllStructuralHits!); break;
                 }
             }
             finally { taken.Dispose(); }
@@ -131,14 +135,19 @@ public sealed class BeamParallelTests
         finally { native.Dispose(); }
     }
 
-    [Fact]
-    public void ResultDoesNotDependOnWorkerCount()
+    [Theory]
+    [InlineData("structural-penetration")]
+    [InlineData("crew-behind")]
+    [InlineData("crew-secondary")]
+    public void ResultDoesNotDependOnWorkerCount(string scenario)
     {
         string?[] results = new[] { 1, 2, 8 }.Select(workers =>
         {
-            using var f = new Setup("structural-penetration", beams: 12);
+            using var f = new Setup(scenario, beams: 12);
             using var session = f.Speculate(workers);
-            return string.Join("|", session.Session.Records.Select(r => $"{r.Outcome} {BitConverter.SingleToInt32Bits(r.Info.Length)} {BitConverter.SingleToInt32Bits(r.Info.EndPoint.X)} {r.Info.AllStructuralHits?.Count}"));
+            Assert.All(session.Session.Records, r => Assert.Equal(BeamParallel.Outcome.Ready, r.Outcome));
+            if (scenario.StartsWith("crew", StringComparison.Ordinal)) Assert.Same(f.Crew, session.Session.Records[0].Info.Operational.Hit.Crew);
+            return string.Join("|", session.Session.Records.Select(r => $"{r.Outcome} {BitConverter.SingleToInt32Bits(r.Info.Length)} {BitConverter.SingleToInt32Bits(r.Info.EndPoint.X)} {r.Info.AllStructuralHits?.Count} {r.Info.Operational.Hit.Crew != null}"));
         }).ToArray();
         Assert.Equal(results[0], results[1]);
         Assert.Equal(results[0], results[2]);
@@ -181,6 +190,70 @@ public sealed class BeamParallelTests
         Assert.All(hits, Assert.NotNull);
         session.Dispose(); // the bucket ends without the emitters running (removed or suppressed)
         Assert.All(hits, h => Assert.Empty(h!));
+    }
+
+    /// <summary>
+    /// Every beam of a round crossing exact crew: all handled on workers and replayed in native order, each result equal to
+    /// the native query at its replay point (the crew hit first, ship hits after).
+    /// </summary>
+    [Fact]
+    public void CrewRoundReplaysEveryRecordInOrder()
+    {
+        using var f = new Setup("crew-behind", beams: 3);
+        using var session = f.Speculate(2);
+        Assert.All(session.Session.Records, r => Assert.Equal(BeamParallel.Outcome.Ready, r.Outcome));
+        for (int i = 0; i < 3; i++)
+        {
+            HitInfo native = f.Native(i);
+            HitInfo taken = f.Take(out bool accepted, i);
+            try
+            {
+                Assert.True(accepted, f.Reasons());
+                Assert.Null(BeamParallel.Difference(native, taken));
+                Assert.Equal(i == 0, taken.Operational.Hit.Crew != null);
+            }
+            finally { taken.Dispose(); native.Dispose(); }
+        }
+        Assert.True(session.Session.Valid);
+    }
+
+    /// <summary>A derived crew type is unaudited: that beam runs natively and every later record is invalidated.</summary>
+    [Fact]
+    public void DerivedCrewTypeFallsBackAndInvalidatesTheRest()
+    {
+        using var f = new Setup("crew-type", beams: 2);
+        using var session = f.Speculate(2);
+        BeamParallel.Record first = session.Session.ByEmitter[f.Beams[0]], second = session.Session.ByEmitter[f.Beams[1]];
+        Assert.Equal(BeamParallel.Outcome.Native, first.Outcome); Assert.Equal("crew type", first.Reason);
+        Assert.Null(first.Info.AllStructuralHits);
+        Assert.Equal(BeamParallel.Outcome.Ready, second.Outcome);
+        long lost = BeamParallel.Stats.LostToFallback;
+        _ = f.Take(out bool accepted);
+        Assert.False(accepted);
+        Assert.False(session.Session.Valid);
+        _ = f.Take(out accepted, 1);
+        Assert.False(accepted);
+        Assert.Equal(lost + 1, BeamParallel.Stats.LostToFallback);
+        Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k == "invalidate: native fallback");
+        Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k == "replay native: crew type");
+    }
+
+    /// <summary>An unaudited crew filter type stops at the crew, before any native filter code runs on a worker.</summary>
+    [Fact]
+    public void DerivedCrewFilterRunsNatively()
+    {
+        using var f = new Setup("crew");
+        var filter = Shell<ForeignFilter>(); filter.Crew = true; filter.Enemies = true; // AffectsCrew
+        Set(f.Beams[0].Rules, "CrewCollisions", filter);
+        using var session = f.Speculate(1);
+        var record = Assert.Single(session.Session.Records);
+        Assert.Equal(BeamParallel.Outcome.Native, record.Outcome);
+        Assert.Equal("crew filter", record.Reason);
+    }
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("ReSharper", "ClassCannotBeInstantiated", Justification = "Only uninitialized shells are created.")]
+    private sealed class ForeignFilter : EffectFilter
+    {
+        private ForeignFilter() : base(Defaults.All) { }
     }
 
     [Fact]
@@ -489,6 +562,13 @@ public sealed class BeamParallelTests
         Assert.False(session.Session.Valid);
     }
 
+    /// <summary>An unaudited crew type (never constructed; shells only).</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("ReSharper", "ClassCannotBeInstantiated", Justification = "Only uninitialized shells are created.")]
+    private sealed class ForeignCrew : SpaceCrew
+    {
+        private ForeignCrew() : base(null!, default, default) { }
+    }
+
     /// <summary>An unaudited IBeamEmitter implementation (never constructed; shells only).</summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("ReSharper", "ClassCannotBeInstantiated", Justification = "Only uninitialized shells are created.")]
     private sealed class ForeignBeamEmitter : BeamEmitter
@@ -584,7 +664,12 @@ public sealed class BeamParallelTests
             Set(rules, "Width", 0.5f);
             Set(rules, "SecondaryFilter", Filter(EffectFilter.Defaults.Enemy));
             Set(rules, "ShieldCollisions", Filter(EffectFilter.Defaults.Enemy));
-            Set(rules, "CrewCollisions", Filter(EffectFilter.Defaults.CollisionsOff));
+            if (IsCrew)
+            {
+                var crewFilter = Filter(EffectFilter.Defaults.Enemy); crewFilter.Enemies = true; // AffectsCrew: crew enter the operational ray
+                Set(rules, "CrewCollisions", crewFilter);
+            }
+            else Set(rules, "CrewCollisions", Filter(EffectFilter.Defaults.CollisionsOff));
             Set(rules, "AttenuatorCollisions", Filter(EffectFilter.Defaults.Enemy));
             foreach (string flag in new[] { "FriendlyShipLowCollisions", "FriendlyShipHighCollisions", "NonFriendlyShipLowCollisions", "NonFriendlyShipHighCollisions" })
                 Set(rules, flag, true);
@@ -592,14 +677,15 @@ public sealed class BeamParallelTests
             Set(rules, "KeepLengthWhenHitNothing", _scenario == "keep-length");
             Set(rules, "AntiPhasingRaycastDistance", _scenario == "anti-phasing" ? 3f : 0f);
             var spreadMin = Shell<ModifiableAngle>(); var spreadMax = Shell<ModifiableAngle>();
-            spreadMin.BaseValue = _scenario == "chain-shield" ? 0f : -0.05f; spreadMax.BaseValue = _scenario == "chain-shield" ? 0f : 0.05f;
+            bool straight = _scenario == "chain-shield" || IsCrew; // beam i runs along world y = 0.5 + 2i
+            spreadMin.BaseValue = straight ? 0f : -0.05f; spreadMax.BaseValue = straight ? 0f : 0.05f;
             Set(rules, "Spread", new Halfling.Range<ModifiableAngle>(spreadMin, spreadMax));
             if (_scenario == "offset")
             {
                 var min = Shell<ModifiableFloat>(); min.BaseValue = 2f; var max = Shell<ModifiableFloat>(); max.BaseValue = 4f;
                 Set(rules, "RandomOffsetRadius", new Halfling.Range<ModifiableFloat>(min, max));
             }
-            if (_scenario == "secondary")
+            if (_scenario is "secondary" or "crew-secondary")
             {
                 var width = Shell<ModifiableFloat>(); width.BaseValue = 6f; Set(rules, "SecondaryWidth", width);
             }
@@ -649,6 +735,19 @@ public sealed class BeamParallelTests
                 return;
             }
             if (_scenario is "shield" or "cold-shield" or "chain-shield") AddShield(target, body, warm: _scenario != "cold-shield");
+            if (IsCrew)
+            {
+                target.Parts._orderedParts.Add(target.Parts._partsByCell[new IntVector2(0, 0)]); // home ship exists in the sim
+                switch (_scenario)
+                {
+                    case "crew": AddCrew(new V(50f, 0.5f), 1f, home: target, player: 1); break;
+                    case "crew-homeless": AddCrew(new V(50f, 0.5f), 1f, home: null, player: 1); break;
+                    case "crew-friendly": AddCrew(new V(50f, 0.5f), 1f, home: null, player: 0); break;
+                    case "crew-behind": AddCrew(new V(101.5f, 0.5f), 0.6f, home: target, player: 1); break; // past the structural row
+                    case "crew-secondary": AddCrew(new V(10f, 2.5f), 0.3f, home: null, player: 1); break; // only the wide secondary ray reaches it
+                    case "crew-type": AddCrew(new V(20f, 0.5f), 0.4f, home: target, player: 1, foreign: true); break; // beam 0 only
+                }
+            }
             if (_scenario == "chain-shield")
             {
                 // A chain segment only in front of beam 0 (world y 0.5); beam 1 (y 2.5) passes it and hits the shield.
@@ -667,6 +766,24 @@ public sealed class BeamParallelTests
         }
 
         internal ArcShield? Shield;
+        internal SpaceCrew? Crew;
+        private bool IsCrew => _scenario.StartsWith("crew", StringComparison.Ordinal);
+
+        /// <summary>A flying crew as SpaceCrew.CreateBody builds it (SpaceCrew.cs:1123-1137): body and fixture user data, Cat10.</summary>
+        private void AddCrew(V location, float radius, Ship? home, int player, bool foreign = false)
+        {
+            SpaceCrew crew = foreign ? Shell<ForeignCrew>() : Shell<SpaceCrew>();
+            Set(crew, "_root", Sim);
+            var soul = Shell<CrewSoul>(); Set(soul, "<HomeShip>k__BackingField", home); Set(soul, "<PlayerIndex>k__BackingField", player);
+            Set(crew, "<Soul>k__BackingField", soul);
+            Body body = World.CreateBody();
+            body.SetTransform(location, 0f);
+            body.UserData = crew;
+            Fixture fixture = body.CreateCircle(radius, 1f);
+            fixture.UserData = crew;
+            fixture.CollisionCategories = Category.Cat10;
+            Crew = crew;
+        }
 
         /// <summary>A full-circle arc shield in front of the target, centred on its part component location.</summary>
         private void AddShield(Ship target, Body body, bool warm)
@@ -734,12 +851,12 @@ public sealed class BeamParallelTests
             return (point, direction, b.InitialHitLength <= 0f);
         }
 
-        /// <summary>The unpatched native GetHitInfo for beam 0 from the pre-speculation RNG state.</summary>
-        internal HitInfo Native()
+        /// <summary>The unpatched native GetHitInfo for a beam from the current RNG state (restored afterwards).</summary>
+        internal HitInfo Native(int beam = 0)
         {
             (ulong a, ulong b) = RandState();
-            (V point, Direction direction, bool isInit) = Spread(Beams[0]);
-            HitInfo info = Beams[0].GetHitInfo(point, direction, isInit);
+            (V point, Direction direction, bool isInit) = Spread(Beams[beam]);
+            HitInfo info = Beams[beam].GetHitInfo(point, direction, isInit);
             RandAfterNative = RandState();
             Source.Rand.SetState(a, b);
             return info;
