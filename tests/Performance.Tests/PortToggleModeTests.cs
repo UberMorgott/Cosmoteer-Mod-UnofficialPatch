@@ -35,9 +35,9 @@ internal static class GameAssemblies
         ExcludeTestDynamicAssemblies();
     }
 
-    /// <summary>Dynamic assemblies the tests emit as fixtures (named "Performance.Tests.*").</summary>
+    /// <summary>Dynamic assemblies the tests emit as fixtures (named "Performance.Tests.*", or ViewDetectTests' same-name foreign ones).</summary>
     internal static bool IsTestDynamic(Assembly assembly) =>
-        assembly.IsDynamic && assembly.GetName().Name is { } name && name.StartsWith("Performance.Tests.", StringComparison.Ordinal);
+        assembly.IsDynamic && (assembly.GetName().Name is { } name && name.StartsWith("Performance.Tests.", StringComparison.Ordinal) || ViewDetectTests.IsForeignFixture(assembly));
 
     /// <summary>
     /// The blueprint toggle skip watches every later assembly load process-wide, and an unknown dynamic assembly fails it for

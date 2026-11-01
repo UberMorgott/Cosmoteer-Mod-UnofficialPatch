@@ -485,7 +485,12 @@ internal static class BlueprintToggleUpdates
     private static readonly string[] KnownDynamic =
         ["HarmonySharedState", "HarmonyDTFAssembly", "MonoMod.Utils.Cil.ILGeneratorProxy", "Anonymously Hosted DynamicMethods Assembly"];
 
+    /// <summary>
+    /// Known by name (Harmony/runtime hosts above), or by instance: this mod's view-detect guard assembly, trusted only as
+    /// the exact assembly ViewDetect emitted (each method only calls ViewDetectHook.Guard), never by its name.
+    /// </summary>
     internal static bool IsKnownDynamic(Assembly assembly) =>
+        ViewDetect.IsGuardAssembly(assembly) ||
         assembly.GetName().Name is { } name && (Array.IndexOf(KnownDynamic, name) >= 0 || name.StartsWith("DMDASM.", StringComparison.Ordinal));
 
     /// <summary>

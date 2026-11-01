@@ -59,6 +59,7 @@ internal static class Patcher
         (InputArrivalTelemetry.Target, typeof(InputArrivalTelemetry)),
         (StallTelemetry.Target, typeof(StallTelemetry)),
         (ServerGc.Target, typeof(ServerGc)),
+        .. ViewDetect.Patches,
     ];
 
     /// <summary>True only when every patch is installed.</summary>
@@ -75,6 +76,8 @@ internal static class Patcher
             if (!retarget) Log.Info($"{retargetError}; shared generic patches inactive: " + string.Join(", ", shared.Select(t => t.DeclaringType?.Name + "." + t.Name)));
             var patches = Patches.Where(p => retarget || !SharedGenericRetarget.IsShared(p.Target))
                 .Select(p => (p.Target, p.Patch, Inliners: FindR2RInliners(p.Target))).ToList(); // pure read, before anything is patched
+            // Before BlueprintToggleUpdates' assembly watcher exists: the guard assembly is then known by instance.
+            ViewDetect.Prepare();
             var rejit = new HarmonyMethod(AccessTools.Method(typeof(Patcher), nameof(Rejit)));
             int inlinerCount = 0;
             foreach ((MethodBase target, Type patch, List<MethodBase> inliners) in patches)
@@ -97,6 +100,8 @@ internal static class Patcher
             if (BeamTargetMemo.Requested) _ = BeamTargetMemo.Initialize();
             if (BeamParallel.Requested) _ = BeamParallel.Initialize();
             if (GlowQuantize.Requested) _ = GlowQuantize.Initialize();
+            // Diagnostic getter guards: installed apart from Patches (no R2R inliner rejit, skip instead of rollback).
+            if (ViewDetect.Requested) _ = ViewDetect.Initialize(harmony);
             Log.Info($"Patched {patches.Count} methods + {inlinerCount} R2R inliners in {sw.ElapsedMilliseconds} ms");
             return true;
         }
@@ -125,6 +130,7 @@ internal static class Patcher
         ParallelIdleParking.Disable();
         AtlasRangeUpload.Disable();
         GlowQuantize.Disable();
+        ViewDetect.Disable();
         // Before unpatching: no compile callback may forward a detour that is being removed.
         if (!SharedGenericRetarget.Disable()) Log.Info("Performance: shared generic retarget listener could not be removed (inert).");
         try

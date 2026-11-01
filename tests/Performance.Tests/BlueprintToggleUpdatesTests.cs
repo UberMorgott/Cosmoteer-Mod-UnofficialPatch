@@ -130,7 +130,7 @@ public class BlueprintToggleUpdatesTests : IDisposable
         // Whatever Harmony created while patching in this process is known.
         Assert.True(Patcher.Apply());
         new Harmony(Patcher.HarmonyId).UnpatchAll(Patcher.HarmonyId);
-        Assert.All(AppDomain.CurrentDomain.GetAssemblies().Where(a => a.IsDynamic && !a.GetName().Name!.StartsWith("Performance.Tests", StringComparison.Ordinal)),
+        Assert.All(AppDomain.CurrentDomain.GetAssemblies().Where(a => a.IsDynamic && !a.GetName().Name!.StartsWith("Performance.Tests", StringComparison.Ordinal) && !ViewDetectTests.IsForeignFixture(a)),
             a => Assert.True(BlueprintToggleUpdates.IsKnownDynamic(a), a.GetName().Name));
     }
 
