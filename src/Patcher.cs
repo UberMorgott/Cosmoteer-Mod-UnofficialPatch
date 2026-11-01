@@ -47,6 +47,7 @@ internal static class Patcher
         (MultiColorMax.Target, typeof(MultiColorMax)),
         .. GlowQuantize.Patches,
         .. NebulaTempList.Patches,
+        .. StatusTempDispose.Patches,
         (PlayerMoney.Target, typeof(PlayerMoney)),
         (PlayerMoneyFlush.Target, typeof(PlayerMoneyFlush)),
         .. MissionTrade.Targets.Select(t => ((MethodBase)t.Target, typeof(MissionTrade))),
