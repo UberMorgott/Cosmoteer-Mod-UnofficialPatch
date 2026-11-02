@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Cosmoteer.Ships.Parts;
 using Cosmoteer.Ships.Repairs;
 using Halfling.Geometry;
@@ -132,7 +133,7 @@ internal static class HullRemovalSkip
             TempList<IntVector2>? hull = manager._convexHull;
             if (!exactType || part == null || hull == null || manager.Count < 2 || !ReferenceEquals(part.Ship, manager.Ship) ||
                 manager.IsDoingTempLightweightUpdate() || part.Rules.BoundingRectType is not (PartRectType.Normal or PartRectType.Physical) ||
-                !InSafeDomain(manager) || !Preserves(hull, part.GetRect(part.Rules.BoundingRectType)))
+                !(KnownSafe(manager._orderedParts, version) || InSafeDomain(manager)) || !Preserves(hull, part.GetRect(part.Rules.BoundingRectType)))
                 return new Pending { Entered = true };
             IntVector2[] copy = _hull is { } h && h.Length >= hull.Count ? h : _hull = new IntVector2[Math.Max(64, hull.Count)];
             for (int i = 0; i < hull.Count; i++) copy[i] = hull[i];
@@ -154,6 +155,8 @@ internal static class HullRemovalSkip
         try
         {
             if (manager.Count == 0 || version(manager._orderedParts) != state.Version) return;
+            // Proven safe before this one-step removal; removing a part cannot widen the bounds.
+            SafeAt.GetValue(manager._orderedParts, static _ => new StrongBox<int>()).Value = state.Version;
             // Same double-checked lock as RefreshConvexHull; a hull rebuilt meanwhile is the same and stays.
             if (manager._convexHull != null) return;
             lock (manager)
@@ -217,6 +220,16 @@ internal static class HullRemovalSkip
         }
         return true;
     }
+
+    /// <summary>
+    /// Parts list version at which <see cref="InSafeDomain"/> is known to hold: set after a refilled one-step removal,
+    /// so the next removal from the same list skips the O(parts) rescan (vanilla clears the cached bounding rect on every
+    /// removal). Any other mutation changes the version.
+    /// </summary>
+    private static readonly ConditionalWeakTable<object, StrongBox<int>> SafeAt = new();
+
+    internal static bool KnownSafe<TPart>(List<TPart> parts, AccessTools.FieldRef<List<TPart>, int> version) =>
+        SafeAt.TryGetValue(parts, out StrongBox<int>? box) && box.Value == version(parts);
 
     /// <summary>Test seam: this thread's open removal scopes.</summary>
     internal static int Depth => _depth;
