@@ -31,6 +31,27 @@ Goal: 40-100 ship battle, x8 >= 60 FPS, no spikes. Stay inside the tick (Track B
 - det-x8 (fleet-combat-determinism at x8, effect hash) perf vs all-new-off; A/B fleet-combat x8 perf / off / BEAM_PARALLEL=1.
 - Runner: scratchpad `run-locked.ps1 -Out <log> -JobsFile <file>` waits for `Bench\.game-lock`.
 
+## Results batch 3 (mod-v3 = all five, fleet-combat x8, 1 rep each, other CPU 12-19%)
+| arm | FPS | ticks/s | frame p50 | p95 | p99 | spikes/min |
+|---|---|---|---|---|---|---|
+| all new off | 8.18 | 22.68 | 106.8 | 246.3 | 290.9 | 52.0 |
+| all new on | 8.99 (+9.9%) | 26.05 (+14.9%) | 100.1 | 204.0 | 256.5 | 30.0 |
+| on + BEAM_PARALLEL=1 | 9.00 | 25.32 | 102.5 | 200.8 | 253.1 | 24.6 |
+- Determinism det-x8 (3000 ticks, hash every 30 + effect hash every tick): on vs off identical.
+- BeamParallel: no measurable gain -> stays opt-in (Codex agrees: audit is creative SP only).
+- TOI log: 50 passes/step, 3716 contacts/pass at 40 ships (vanilla = 186k contact checks per step).
+
+## Final A/B (mod-v5 = a3dd5ab, 1 rep per arm, `out\trackA\run5.log`)
+| scenario | arm | FPS | ticks/s | frame p50 | p99 |
+|---|---|---|---|---|---|
+| fleet-combat x8 | off | 7.90 | 20.67 | 116.0 | 308.8 |
+| fleet-combat x8 | on | 8.32 (+5.3%) | 22.57 (+9.2%) | 107.1 | 296.9 |
+| fleet-combat x1 | off | 41.05 | 18.10 | 14.8 | 106.9 |
+| fleet-combat x1 | on | 43.22 (+5.3%) | 18.35 | 13.7 | 114.2 |
+- x1 runs 18 ticks/s of 30: the 40-ship battle is below real time even at x1 (tick ~25-30 ms main thread).
+- Profile after (prof2, mod-v4): SolveTOI 3511 -> 987 samples (-72%), hull Fill+IsEmpty 1121 -> 613.
+- Codex: APPROVE f73b7bc..a3dd5ab.
+
 ## Next
 - Beams (EmitBeams 6.7 ms/tick): decide generalize BeamParallel (creative SP only today) vs other.
 - DestroyingBody multicast (sim-relevant order: careful), adjacency iterators, 100-ship scenario `out\trackA\fleet-combat-100-x8.json`.
