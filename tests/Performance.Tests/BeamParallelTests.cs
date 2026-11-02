@@ -44,6 +44,21 @@ public sealed class BeamParallelTests
     public void NativeDependenciesArePinned() => BeamParallel.ValidateNative();
 
     [Fact]
+    public void OnlyAuditedExactModePairsAreOwned()
+    {
+        SimRoot sim = Shell<SimRoot>(); GameRoot game = Shell<GameRoot>(); sim.Game = game;
+        bool With(object simMode, object gameMode)
+        {
+            Set(sim, "<Mode>k__BackingField", simMode); Set(game, "<Mode>k__BackingField", gameMode);
+            return BeamParallel.AuditedMode(sim);
+        }
+        Assert.True(With(Shell<CreativeSimModeManager>(), Shell<CreativeGameModeManager>()));
+        Assert.True(With(Shell<Cosmoteer.Modes.Career.CareerSimModeManager>(), Shell<Cosmoteer.Modes.Career.CareerGameModeManager>()));
+        Assert.False(With(Shell<Cosmoteer.Modes.Career.CareerSimModeManager>(), Shell<CreativeGameModeManager>())); // mismatched pair
+        Assert.False(With(Shell<Cosmoteer.Modes.SimModeManager>(), Shell<Cosmoteer.Modes.GameModeManager>())); // base, unaudited
+    }
+
+    [Fact]
     public void PatchTargetsAreNotSharedGeneric()
     {
         foreach (MethodBase target in new MethodBase[] { BeamParallel.BucketTarget, BeamParallel.EmitTarget, BeamParallel.HitInfoTarget, BeamParallel.StopTarget,
@@ -325,7 +340,7 @@ public sealed class BeamParallelTests
             float length = f.Beams[0]._length, scale = f.Beams[0]._effectsScale;
             using var session = f.Speculate(2);
             Assert.Empty(session.Session.Records); // the first unaudited beam stops the whole round
-            Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k == "predict stop: target graph");
+            Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k.StartsWith("predict stop: target graph: ", StringComparison.Ordinal));
             Assert.Equal(rand, f.RandState());
             Assert.Equal(length, f.Beams[0]._length); Assert.Equal(scale, f.Beams[0]._effectsScale);
         }
@@ -409,7 +424,7 @@ public sealed class BeamParallelTests
         {
             using var session = f.Speculate(2);
             Assert.False(session.Session.ByEmitter.ContainsKey(second));
-            Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k == "predict stop: target graph");
+            Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k.StartsWith("predict stop: target graph: ", StringComparison.Ordinal));
             _ = first.GetShipTarget(checkProhibited: true); // the first beam's native run: its getter shrinks the shield
             Assert.Equal(1f, f.Shield!._cachedArcRadius);
             _ = f.Take(out bool accepted, second);

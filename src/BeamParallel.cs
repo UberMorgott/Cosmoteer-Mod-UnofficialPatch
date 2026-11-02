@@ -18,7 +18,14 @@ using Cosmoteer.Data;
 using Cosmoteer.Game;
 using Cosmoteer.Game.Multiplayer;
 using Cosmoteer.Modes;
+using Cosmoteer.Factions;
+using Cosmoteer.Modes.Career;
 using Cosmoteer.Modes.Creative;
+using Cosmoteer.Modes.Pvp;
+using Cosmoteer.Modes.Pvp.BuildBattle;
+using Cosmoteer.Modes.Pvp.Domination;
+using Cosmoteer.Modes.Pvp.Elimination;
+using Cosmoteer.Modes.Pvp.Pointmatch.Arena;
 using Cosmoteer.Ships;
 using Cosmoteer.Ships.Parts;
 using Cosmoteer.Ships.Parts.Colliders;
@@ -50,7 +57,7 @@ using StructuralHitInfo = Cosmoteer.Ships.Parts.Weapons.BeamEmitter.StructuralHi
 namespace Performance;
 
 /// <summary>
-/// Opt-in prototype (<c>PERFORMANCE_BEAM_PARALLEL=1</c>, single-player only): the beam hit queries of sim bucket -4 run in
+/// Opt-in (<c>PERFORMANCE_BEAM_PARALLEL=1</c>; SP and MP, audited modes only: <see cref="AuditedModes"/>): the beam hit queries of sim bucket -4 run in
 /// parallel before the bucket, and the native serial loop then uses each result only when every query input matches.
 /// <para/>
 /// Bucket -4 holds only the per-ship <c>WeaponManager.EmitBeams</c> proxies. At its start (<see cref="BucketHook"/>) the
@@ -88,7 +95,7 @@ internal static class BeamParallel
     private static readonly Guid HalflingMvid = new("29d04acb-ae49-4f3b-8499-f03c9144a3a9");
     private const string GameFileSha = "F9451FBED4A11396C816D3F44EBDD836E48BCE68BA6AEAE28C3E534E037207D4";
     private const string HalflingFileSha = "80213C7C8182CE63B9075A48DFD80A7614B1FA2AB3BCD16A69D5363CF9A4B391";
-    internal const string NativeIlSha256 = "74B009B55234500C8D578D6CE3B55A289C1FD3E5DF8492387A75308F0DD166A5";
+    internal const string NativeIlSha256 = "A0E218BC5CA1B96C23CEE2CE1528A830E216F1075B719FA003AE8BF6E3212484";
 
     private const BindingFlags All = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
     internal static readonly MethodInfo BucketTarget = AccessTools.Method(typeof(SceneRoot), "FixedUpdateForBucket", [typeof(int)]);
@@ -159,6 +166,27 @@ internal static class BeamParallel
         yield return M(typeof(SimModeManager), "AreEnemies");
         yield return M(typeof(SimModeManager), "CanDamage");
         yield return M(typeof(CreativeSimModeManager), "CanDamage");
+        // Mode overrides reachable from the worker path (AuditedModes): allegiance, damage and invulnerability reads.
+        foreach (string name in new[] { "AreAllies", "CanAttack", "IsInvulnerable", "IsHumanPlayerShip", "IsHumanPlayerAllegiance", "GetTeamFromPlayerIndex" })
+            yield return M(typeof(SimModeManager), name);
+        yield return M(typeof(GameRoot), "GetTeamFromPlayerIndex");
+        yield return typeof(GameRoot).GetMethod("GetPlayerState", All, [typeof(int), typeof(bool)]) ?? throw new MissingMethodException(nameof(GameRoot), "GetPlayerState");
+        foreach (string name in new[] { "CanBeDamagedBy", "IsEnemiesWith" })
+            foreach (MethodInfo m in typeof(Ship).GetMethods(All).Where(m => m.Name == name).OrderBy(m => m.MetadataToken)) yield return m;
+        Type career = typeof(CareerSimModeManager);
+        foreach (string name in new[] { "AreEnemies", "CanAttack", "IsInvulnerable", "IsHumanPlayerAllegiance", "AreTruced", "HasProtectionAgreement", "get_CombatDifficulty" })
+            yield return M(career, name);
+        foreach (MethodInfo local in Locals(career, "HasProtectionAgreement")) yield return local;
+        yield return M(typeof(CareerGameModeManager), "IsHumanPlayerIndex");
+        yield return M(typeof(WantedManager), "IsPlayerWantedBy");
+        yield return typeof(FactionRules).GetMethod("GetFaction", All, [typeof(int)]) ?? throw new MissingMethodException(nameof(FactionRules), "GetFaction");
+        yield return M(typeof(PlayerIndexes), "IsFactionMilitary");
+        yield return M(typeof(PlayerIndexes), "IsFactionCivilian");
+        yield return M(typeof(PvpSimModeManager), "CanAttack");
+        yield return M(typeof(PvpSimModeManager), "CanDamage");
+        yield return M(typeof(BuildBattleSimModeManager), "IsInvulnerable");
+        yield return M(typeof(Ship), "get_IsInvulnerable");
+        yield return M(typeof(Ship), "get_IsHumanPlayerShip");
         yield return M(typeof(Ship), "ExistsInSim");
         yield return M(typeof(CrewSoul), "get_HomeShip");
         yield return M(typeof(CrewSoul), "get_PlayerIndex");
@@ -187,7 +215,7 @@ internal static class BeamParallel
             _director = director;
             director.FrameStarting += OnFrameStarting;
             Volatile.Write(ref _ready, 1);
-            Log.Info("Beam parallel prototype ready: single-player bucket -4 hit queries run speculatively, validated replay");
+            Log.Info("Beam parallel ready: bucket -4 hit queries run speculatively, validated replay");
             return true;
         }
         catch (Exception ex) { Reject(ex.Message); return false; }
@@ -488,19 +516,37 @@ internal static class BeamParallel
     /// <summary>Engine annotations say non-null where runtime attachment fields can be null; read the type defensively.</summary>
     private static Type? RuntimeType(object? value) => value?.GetType();
 
+    /// <summary>
+    /// Exact sim/game mode pairs whose overrides reachable from the worker path (CanDamage, CanAttack, AreEnemies/AreAllies,
+    /// IsInvulnerable, IsHumanPlayerAllegiance; NativeDependencies) only read synced sim state: no local player, no writes
+    /// except GetPlayerState's add of a missing player, which PlayerKnown/ExistingPlayer route to native. Any other pair runs native.
+    /// </summary>
+    private static readonly (Type Sim, Type Game)[] AuditedModes =
+    [
+        (typeof(CreativeSimModeManager), typeof(CreativeGameModeManager)), (typeof(CareerSimModeManager), typeof(CareerGameModeManager)),
+        (typeof(BuildBattleSimModeManager), typeof(BuildBattleGameModeManager)), (typeof(DominationSimModeManager), typeof(DominationGameModeManager)),
+        (typeof(EliminationSimModeManager), typeof(EliminationGameModeManager)), (typeof(ArenaSimModeManager), typeof(ArenaGameModeManager)),
+    ];
+    internal static bool AuditedMode(SimRoot sim)
+    {
+        if (RuntimeType(sim.Game) != typeof(GameRoot)) return false;
+        Type? simMode = RuntimeType(sim.Mode), gameMode = RuntimeType(sim.Game!.Mode);
+        foreach ((Type s, Type g) in AuditedModes) if (simMode == s && gameMode == g) return true;
+        return false;
+    }
+
     private static bool Owned(SimRoot sim)
     {
-        if (sim.GetType() != typeof(SimRoot) || !SinglePlayer(sim) || sim.IsDoingParallelUpdate) return false;
+        if (sim.GetType() != typeof(SimRoot) || !AuditedMode(sim) || sim.IsDoingParallelUpdate) return false;
         if (!ReferenceEquals(sim.SceneThread, Thread.CurrentThread)) return false;
         if (!_allowTestOwner && !ReferenceEquals(_director?.MainThread, Thread.CurrentThread)) return false;
-        return RuntimeType(sim.Mode) == typeof(CreativeSimModeManager) && RuntimeType(sim.Game!.Mode) == typeof(CreativeGameModeManager) &&
-            RuntimeType(sim.PhysicsWorld) == typeof(World) && RuntimeType(sim.PhysicsWorld.ContactManager) == typeof(ContactManager) &&
+        return RuntimeType(sim.PhysicsWorld) == typeof(World) && RuntimeType(sim.PhysicsWorld.ContactManager) == typeof(ContactManager) &&
             RuntimeType(sim.PhysicsWorld.ContactManager.BroadPhase) == typeof(DynamicTreeBroadPhase<BodyFixtureProxy>);
     }
 
     internal static Session? Begin(SimRoot sim)
     {
-        if (!Owned(sim)) { Stats.Fallback("session: not owned single-player creative sim"); return null; }
+        if (!Owned(sim)) { Stats.Fallback("session: not owned audited-mode sim"); return null; }
         if (_dispatchOverride == null && (!FastParallel.IsRunning || FastParallel.ThreadCount <= 0)) { Stats.Fallback("session: FastParallel unavailable"); return null; }
         List<IFixedUpdateableSceneObject> bucket = sim.FixedUpdateables.GetBucket(-4);
         _managers.Clear();
@@ -546,7 +592,7 @@ internal static class BeamParallel
     /// <summary>Snapshot and speculative round for the EmitBeams managers of bucket -4, in bucket order.</summary>
     internal static Session? BeginWith(SimRoot sim, List<WeaponManager> managers)
     {
-        if (!Owned(sim)) { Stats.Fallback("session: not owned single-player creative sim"); return null; }
+        if (!Owned(sim)) { Stats.Fallback("session: not owned audited-mode sim"); return null; }
         long start = Stopwatch.GetTimestamp();
         Session s = Pooled;
         s.Clear();
@@ -711,7 +757,7 @@ internal static class BeamParallel
             BeamTargetMemo.Query q = TargetQuery;
             q.Clear();
             q.Receiver = beam; q.Provider = beam._getTargetFrom; q.Sim = sim; q.World = sim.PhysicsWorld;
-            try { if (!BeamTargetMemo.PureBefore(q, secondaryFilter: false)) why = "target graph"; }
+            try { if (!BeamTargetMemo.PureBefore(q, secondaryFilter: false)) why = q.Reason ?? "target graph"; }
             finally { q.Clear(); }
         }
         return why == null;

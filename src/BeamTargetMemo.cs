@@ -273,9 +273,11 @@ internal static class BeamTargetMemo
         internal bool ExpectWorld, InWorld, Calling;
         internal readonly Ship?[] RelevantShips = new Ship?[36];
         internal int RelevantCount;
+        /// <summary>Why <see cref="PureBefore(Query, bool)"/> refused (constant strings; diagnostics only).</summary>
+        internal string? Reason;
         internal void Clear()
         {
-            Parent = null; Next = null; Receiver = null; Provider = null; Sim = null; World = null; Value = default;
+            Reason = null; Parent = null; Next = null; Receiver = null; Provider = null; Sim = null; World = null; Value = default;
             ExpectWorld = false; InWorld = false; Calling = false;
             Array.Clear(RelevantShips); RelevantCount = 0;
         }
@@ -481,66 +483,67 @@ internal static class BeamTargetMemo
     /// <param name="secondaryFilter">False: vet only the target getter graph (GetShipTarget/GetFireTarget), not the secondary filter callback.</param>
     internal static bool PureBefore(Query q, bool secondaryFilter)
     {
-        q.RelevantCount = 0;
+        q.RelevantCount = 0; q.Reason = null;
         BeamEmitter? receiver = q.Receiver;
         // The turret graph is vetted for BeamParallel only (secondaryFilter: false); the memo stays FixedWeapon-only.
         bool turret = !secondaryFilter && Exact<TurretWeapon>(q.Provider);
         if (!Exact<BeamEmitter>(receiver) || !(turret || Exact<FixedWeapon>(q.Provider)) || q.Sim == null ||
-            !ReferenceEquals(receiver._getTargetFrom, q.Provider) || q.Sim.GetType() != typeof(SimRoot) ||
-            !Exact<GameRoot>(q.Sim.Game) || !Exact<CreativeSimModeManager>(q.Sim.Mode) ||
-            !Exact<CreativeGameModeManager>(q.Sim.Game.Mode)) return false;
+            !ReferenceEquals(receiver._getTargetFrom, q.Provider) || q.Sim.GetType() != typeof(SimRoot)) return Stop(q, "target graph: provider type");
+        if (!BeamParallel.AuditedMode(q.Sim)) return Stop(q, "target graph: mode");
         Guid core = typeof(object).Module.ModuleVersionId;
-        if (core != new Guid("77d2994f-32f8-4ff2-8313-7ebf44feba98") && core != new Guid("47f87616-cc44-40db-91db-a39140060003")) return false;
+        if (core != new Guid("77d2994f-32f8-4ff2-8313-7ebf44feba98") && core != new Guid("47f87616-cc44-40db-91db-a39140060003")) return Stop(q, "target graph: runtime");
         Weapon provider = q.Provider!; // exact FixedWeapon or TurretWeapon checked above
         if (!Exact<Part>(receiver.Part) || !Exact<Part>(provider.Part) ||
             receiver.Rules.GetType() != typeof(BeamEmitterRules) || provider.Rules.GetType() != (turret ? typeof(TurretWeaponRules) : typeof(FixedWeaponRules)) ||
-            !Exact<BeamEmitter>(provider._targetingEmitter)) return false;
-        if (turret && !TurretGraph(q, (TurretWeapon)provider)) return false;
+            !Exact<BeamEmitter>(provider._targetingEmitter)) return Stop(q, "target graph: provider shape");
+        if (turret && !TurretGraph(q, (TurretWeapon)provider)) return Stop(q, q.Reason ?? "target graph: turret");
         var targeting = (BeamEmitter)provider._targetingEmitter;
         if (!Exact<Part>(targeting.Part) || targeting.Rules.GetType() != typeof(BeamEmitterRules) ||
-            !AddShip(q, receiver.Part.Ship) || !AddShip(q, provider.Part.Ship) || !AddShip(q, targeting.Part.Ship)) return false;
+            !AddShip(q, receiver.Part.Ship) || !AddShip(q, provider.Part.Ship) || !AddShip(q, targeting.Part.Ship)) return Stop(q, "target graph: targeting emitter");
         Ship providerShip = provider.Part.Ship!;
-        if (!Exact<WeaponManager>(providerShip.Weapons)) return false;
-        if (provider.Rules.AllowDirectControl && provider.DirectControlBinding != null && providerShip.Weapons.DirectControlInput != null) return false;
+        if (!Exact<WeaponManager>(providerShip.Weapons)) return Stop(q, "target graph: weapon manager");
+        if (provider.Rules.AllowDirectControl && provider.DirectControlBinding != null && providerShip.Weapons.DirectControlInput != null) return Stop(q, "target graph: direct control");
         ModifiableFloat range = targeting.Rules.Range;
-        if (!Exact<ModifiableFloat>(range) || range.Modifiers is { Length: > 0 } || targeting.Rules.StretchRange != null) return false;
+        if (!Exact<ModifiableFloat>(range) || range.Modifiers is { Length: > 0 } || targeting.Rules.StretchRange != null) return Stop(q, "target graph: targeting range");
         var coverage = providerShip.Metadata.CustomWeaponCoverages;
         if (!Exact<Dictionary<(PartSaveData, ID<PartComponentRules>), MPValue<WeaponCoverage>>>(coverage) ||
-            !ReferenceEquals(coverage.Comparer, EqualityComparer<(PartSaveData, ID<PartComponentRules>)>.Default)) return false;
-        if (!Exact<TargetManager>(provider.ExplicitTargets)) return false;
+            !ReferenceEquals(coverage.Comparer, EqualityComparer<(PartSaveData, ID<PartComponentRules>)>.Default)) return Stop(q, "target graph: coverage");
+        if (!Exact<TargetManager>(provider.ExplicitTargets)) return Stop(q, "target graph: target manager");
         List<WeaponTarget> targets = provider.ExplicitTargets._targets;
-        if (!Exact<List<WeaponTarget>>(targets) || targets.Count > 32) return false;
-        if (!SafeFilter(provider.Rules.ProhibitTargetPartsFilter) || (secondaryFilter && !SafeScopedFilter(q, receiver.Rules.SecondaryFilter))) return false;
+        if (!Exact<List<WeaponTarget>>(targets) || targets.Count > 32) return Stop(q, "target graph: target list");
+        if (!SafeFilter(provider.Rules.ProhibitTargetPartsFilter)) return Stop(q, "target graph: prohibit filter");
+        if (secondaryFilter && !SafeScopedFilter(q, receiver.Rules.SecondaryFilter)) return Stop(q, "target graph: secondary filter");
         foreach (WeaponTarget candidate in CollectionsMarshal.AsSpan(targets))
         {
-            if (!Exact<WeaponTarget>(candidate)) return false;
+            if (!Exact<WeaponTarget>(candidate)) return Stop(q, "target graph: explicit target");
             if (!candidate.IsConfirmed) continue;
-            if (Exact<Ship>(candidate.Target)) { if (!AddShip(q, (Ship)candidate.Target)) return false; }
+            if (Exact<Ship>(candidate.Target)) { if (!AddShip(q, (Ship)candidate.Target)) return Stop(q, "target graph: explicit target"); }
             else if (Exact<Part>(candidate.Target))
             {
                 var part = (Part)candidate.Target;
-                if (!SafePart(part) || !AddShip(q, part.Ship)) return false;
+                if (!SafePart(part) || !AddShip(q, part.Ship)) return Stop(q, "target graph: explicit part");
             }
-            else return false;
+            else return Stop(q, "target graph: explicit target");
         }
         CommandManager commands = providerShip.Commands;
-        if (!Exact<CommandManager>(commands) || !Exact<List<Command>>(commands._commands) || commands._commands.Count > 32) return false;
+        if (!Exact<CommandManager>(commands) || !Exact<List<Command>>(commands._commands) || commands._commands.Count > 32) return Stop(q, "target graph: commands");
         foreach (Command command in CollectionsMarshal.AsSpan(commands._commands))
         {
-            if (RuntimeType(command)?.Module.ModuleVersionId != GameMvid) return false;
+            if (RuntimeType(command)?.Module.ModuleVersionId != GameMvid) return Stop(q, "target graph: foreign command");
             if (!command.IsConfirmed) continue;
             if (command is IAttackCommand)
             {
-                if (command.GetType() != typeof(AttackCommand) || !AddShip(q, ((AttackCommand)command)._target)) return false;
+                if (command.GetType() != typeof(AttackCommand) || !AddShip(q, ((AttackCommand)command)._target)) return Stop(q, "target graph: attack command");
             }
             break;
         }
-        for (int i = 0; i < q.RelevantCount; i++) if (!SafeShip(q, q.RelevantShips[i])) return false;
-        if (q.Sim.CurrentActionSourcePlayer is { } source && !ExistingPlayer(q.Sim.Game, source.PlayerId, out _)) return false;
+        for (int i = 0; i < q.RelevantCount; i++) if (!SafeShip(q, q.RelevantShips[i])) return Stop(q, SafeShipReason(q, q.RelevantShips[i]));
+        if (q.Sim.CurrentActionSourcePlayer is { } source && !ExistingPlayer(q.Sim.Game, source.PlayerId, out _)) return Stop(q, "target graph: action source player");
         World? world = q.World;
-        return Exact<World>(world) && ReferenceEquals(world, q.Sim.PhysicsWorld) && NativeWorldCallbacks(world) && Exact<ContactManager>(world.ContactManager) &&
-            Exact<DynamicTreeBroadPhase<BodyFixtureProxy>>(world.ContactManager.BroadPhase);
+        return (Exact<World>(world) && ReferenceEquals(world, q.Sim.PhysicsWorld) && NativeWorldCallbacks(world) && Exact<ContactManager>(world.ContactManager) &&
+            Exact<DynamicTreeBroadPhase<BodyFixtureProxy>>(world.ContactManager.BroadPhase)) || Stop(q, "target graph: world");
     }
+    private static bool Stop(Query q, string reason) { q.Reason = reason; return false; }
     /// <summary>
     /// TurretWeapon.GetFireTarget (TurretWeapon.cs:386-401) on top of the Weapon graph vetted above: the aimed Target, then
     /// (no auto-fire toggle) the base explicit target plus IsTargetInArc. Range: GetTurretRange Valid/Normal (1248-1295)
@@ -551,12 +554,12 @@ internal static class BeamTargetMemo
     {
         TurretWeaponRules rules = turret.Rules;
         ITarget? aimed = turret.Target;
-        if (Exact<Ship>(aimed)) { if (!AddShip(q, (Ship)aimed)) return false; }
-        else if (Exact<Part>(aimed)) { if (!SafePart((Part)aimed) || !AddShip(q, ((Part)aimed).Ship)) return false; }
-        else if (aimed != null) return false;
+        if (Exact<Ship>(aimed)) { if (!AddShip(q, (Ship)aimed)) return Stop(q, "target graph: turret aim"); }
+        else if (Exact<Part>(aimed)) { if (!SafePart((Part)aimed) || !AddShip(q, ((Part)aimed).Ship)) return Stop(q, "target graph: turret aim part"); }
+        else if (aimed != null) return Stop(q, "target graph: turret aim");
         // IsAutoFiring reads an arbitrary toggle implementation; it is reached unless the aimed target is returned at once.
-        if (turret._autoFireToggle != null && (aimed == null || rules.AllowAimAtProhibitedTarget)) return false;
-        return Unmodified(rules.ValidRange) && Unmodified(rules.ValidArc) && Unmodified(rules.FiringArc);
+        if (turret._autoFireToggle != null && (aimed == null || rules.AllowAimAtProhibitedTarget)) return Stop(q, "target graph: turret auto-fire toggle");
+        return (Unmodified(rules.ValidRange) && Unmodified(rules.ValidArc) && Unmodified(rules.FiringArc)) || Stop(q, "target graph: turret range/arc modifier");
     }
     private static bool Unmodified(object? value) => value switch
     {
@@ -597,6 +600,16 @@ internal static class BeamTargetMemo
         return Exact<ConcurrentDictionary<int, SimShipsManager.TeamSightCircles>>(sight) &&
             ReferenceEquals(sight.Comparer, EqualityComparer<int>.Default) && sight.TryGetValue(team, out var cache) &&
             Exact<SimShipsManager.TeamSightCircles>(cache) && cache.RefreshNum == manager._sightCircleRefreshBuster;
+    }
+    /// <summary>Diagnostics only: which SafeShip condition failed (main thread, after SafeShip returned false).</summary>
+    private static string SafeShipReason(Query q, Ship? ship)
+    {
+        if (!Exact<Ship>(ship) || !ReferenceEquals(ship._root, q.Sim)) return "target graph: ship";
+        if (ship.SpecialSightProvider != null) return "target graph: special sight";
+        if (!Exact<PartsManager>(ship.Parts) || !Exact<ShipMetadata>(ship.Metadata)) return "target graph: ship shape";
+        if (ship.Parts._isBoundingCircleDirty || !ship.Parts._cachedBoundingCircle.HasValue) return "target graph: bounding circle dirty";
+        if (!ExistingPlayer(q.Sim!.Game, ship.Metadata.PlayerIndex, out _)) return "target graph: player state";
+        return "target graph: sight cache stale";
     }
     private static bool SafeSet(HashSet<ID<PartCategory>>? set) => set == null ||
         (set.GetType() == typeof(HashSet<ID<PartCategory>>) && ReferenceEquals(set.Comparer, EqualityComparer<ID<PartCategory>>.Default));
