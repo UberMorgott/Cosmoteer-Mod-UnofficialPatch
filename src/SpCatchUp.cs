@@ -48,7 +48,8 @@ internal static class SpCatchUp
     internal static readonly MethodInfo Vanilla = AccessTools.Method(typeof(NetManager), nameof(NetManager.GetTargetAdjustedDeltaTime))
         ?? throw new MissingMethodException(nameof(NetManager), nameof(NetManager.GetTargetAdjustedDeltaTime));
 
-    internal static (MethodBase Target, Type Patch)[] Patches => Requested ? [(Target, typeof(SpCatchUp))] : [];
+    /// <summary>Also carries <see cref="TickBudget"/>'s cap: both rewrite the same call.</summary>
+    internal static (MethodBase Target, Type Patch)[] Patches => Requested || TickBudget.Requested ? [(Target, typeof(SpCatchUp))] : [];
 
     private static readonly WeakReference<NetManager?> _owner = new(null); // never keeps a finished game alive
     private static float _scale;
@@ -68,6 +69,12 @@ internal static class SpCatchUp
     internal static Time DeltaTime(NetManager net)
     {
         Time vanilla = net.GetTargetAdjustedDeltaTime(); // exactly once: tick step mode reads keys and prints
+        double proposed = Requested ? CatchUp(net, vanilla) : vanilla;
+        return TickBudget.Requested ? TickBudget.Limit(net, vanilla, proposed) : proposed;
+    }
+
+    private static double CatchUp(NetManager net, Time vanilla)
+    {
         var debug = net.Game.DebugTools;
         float scale = net.Sim.Clock.ScaleFactor;
         bool sameOwner = _owner.TryGetTarget(out NetManager? owner) && ReferenceEquals(net, owner);
