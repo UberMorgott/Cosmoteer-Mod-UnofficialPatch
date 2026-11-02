@@ -108,7 +108,9 @@ internal static class BoundingPoints
                 if (cell.Y < minY) minY = cell.Y;
                 if (cell.Y > maxY) maxY = cell.Y;
             }
-            long width = (long)maxX - minX + 1, height = (long)maxY - minY + 1, area = width * height;
+            long width = (long)maxX - minX + 1, height = (long)maxY - minY + 1;
+            if (width > 1 << 16 || height > 1 << 16) return; // huge coordinates: keep the dictionary (and no overflow below)
+            long area = width * height;
             if (area > 4L * map.Count + 4096) return; // shortcut: sparse map stays on the dictionary
             object?[] cells = t_grid ??= new object?[4096];
             if (cells.Length < area) t_grid = cells = new object?[Math.Max(area, cells.Length * 2)];

@@ -19,7 +19,8 @@ namespace Performance;
 /// The two PartContinuousEffects calls now go to an ordered per-camera subscriber list with O(1) add and remove, and the
 /// camera event gets one forwarding handler that calls the subscribers in subscription order on a snapshot, as a multicast
 /// delegate does; remove takes the last equal handler like Delegate.Remove. Zoom handling is presentation only (media
-/// effect refresh) and runs in the same order. Off: <c>PERFORMANCE_ZOOM_SUBSCRIBERS=0</c>.
+/// effect refresh) and runs in the same order. shortcut: a foreign ZoomChanged subscriber added between effect subscriptions
+/// is called after all of them (vanilla interleaves); the game itself has no other subscriber. Off: <c>PERFORMANCE_ZOOM_SUBSCRIBERS=0</c>.
 /// </summary>
 internal static class ZoomSubscribers
 {
@@ -61,6 +62,7 @@ internal static class ZoomSubscribers
         internal readonly LinkedList<EventHandler<EventArgs>> Order = new();
         internal readonly Dictionary<EventHandler<EventArgs>, Stack<LinkedListNode<EventHandler<EventArgs>>>> Nodes = new();
         internal EventHandler<EventArgs>[] Snapshot = new EventHandler<EventArgs>[64];
+        internal bool Attached;
 
         internal void Raise(object? sender, EventArgs e)
         {
@@ -92,11 +94,14 @@ internal static class ZoomSubscribers
     internal static void Add(CameraNode camera, EventHandler<EventArgs>? handler)
     {
         if (handler == null) return;
-        bool first = false;
-        Subscribers subs = Cameras.GetValue(camera, _ => { first = true; return new Subscribers(); });
-        if (first) camera.ZoomChanged += subs.Raise;
+        Subscribers subs = Cameras.GetValue(camera, _ => new Subscribers()); // factory may run twice; only the stored one is used
         lock (subs)
         {
+            if (!subs.Attached)
+            {
+                subs.Attached = true;
+                camera.ZoomChanged += subs.Raise;
+            }
             LinkedListNode<EventHandler<EventArgs>> node = subs.Order.AddLast(handler);
             if (!subs.Nodes.TryGetValue(handler, out Stack<LinkedListNode<EventHandler<EventArgs>>>? stack)) subs.Nodes[handler] = stack = new();
             stack.Push(node);
