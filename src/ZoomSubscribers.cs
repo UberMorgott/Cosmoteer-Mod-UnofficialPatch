@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
 using Cosmoteer.Ships.Parts.Effects;
 using Cosmoteer.Simulation.Cameras;
 using HarmonyLib;
