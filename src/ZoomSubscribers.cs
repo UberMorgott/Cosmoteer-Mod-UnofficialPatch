@@ -56,67 +56,11 @@ internal static class ZoomSubscribers
         return code;
     }
 
-    /// <summary>Ordered multiset of handlers; the camera event holds only <see cref="Raise"/>.</summary>
-    private sealed class Subscribers
-    {
-        internal readonly LinkedList<EventHandler<EventArgs>> Order = new();
-        internal readonly Dictionary<EventHandler<EventArgs>, Stack<LinkedListNode<EventHandler<EventArgs>>>> Nodes = new();
-        internal EventHandler<EventArgs>[] Snapshot = new EventHandler<EventArgs>[64];
-        internal bool Attached;
+    private static readonly OrderedEvent<CameraNode> Zoom = new((camera, forwarder) => camera.ZoomChanged += forwarder);
 
-        internal void Raise(object? sender, EventArgs e)
-        {
-            int n;
-            EventHandler<EventArgs>[] snapshot;
-            lock (this)
-            {
-                n = Order.Count;
-                if (Snapshot.Length < n) Snapshot = new EventHandler<EventArgs>[Math.Max(n, Snapshot.Length * 2)];
-                snapshot = Snapshot;
-                Snapshot = []; // a nested raise allocates its own snapshot
-                Order.CopyTo(snapshot, 0);
-            }
-            try
-            {
-                for (int i = 0; i < n; i++) snapshot[i](sender, e);
-            }
-            finally
-            {
-                Array.Clear(snapshot, 0, n);
-                lock (this) if (snapshot.Length > Snapshot.Length) Snapshot = snapshot;
-            }
-        }
-    }
+    /// <summary>camera.ZoomChanged += handler.</summary>
+    internal static void Add(CameraNode camera, EventHandler<EventArgs>? handler) => Zoom.Add(camera, handler);
 
-    private static readonly ConditionalWeakTable<CameraNode, Subscribers> Cameras = new();
-
-    /// <summary>camera.ZoomChanged += handler (null is a no-op, as for an event).</summary>
-    internal static void Add(CameraNode camera, EventHandler<EventArgs>? handler)
-    {
-        if (handler == null) return;
-        Subscribers subs = Cameras.GetValue(camera, _ => new Subscribers()); // factory may run twice; only the stored one is used
-        lock (subs)
-        {
-            if (!subs.Attached)
-            {
-                subs.Attached = true;
-                camera.ZoomChanged += subs.Raise;
-            }
-            LinkedListNode<EventHandler<EventArgs>> node = subs.Order.AddLast(handler);
-            if (!subs.Nodes.TryGetValue(handler, out Stack<LinkedListNode<EventHandler<EventArgs>>>? stack)) subs.Nodes[handler] = stack = new();
-            stack.Push(node);
-        }
-    }
-
-    /// <summary>camera.ZoomChanged -= handler: drops the last equal handler, if any.</summary>
-    internal static void Remove(CameraNode camera, EventHandler<EventArgs>? handler)
-    {
-        if (handler == null || !Cameras.TryGetValue(camera, out Subscribers? subs)) return;
-        lock (subs)
-        {
-            if (!subs.Nodes.TryGetValue(handler, out Stack<LinkedListNode<EventHandler<EventArgs>>>? stack)) return;
-            subs.Order.Remove(stack.Pop());
-            if (stack.Count == 0) subs.Nodes.Remove(handler);
-        }
-    }
+    /// <summary>camera.ZoomChanged -= handler.</summary>
+    internal static void Remove(CameraNode camera, EventHandler<EventArgs>? handler) => Zoom.Remove(camera, handler);
 }

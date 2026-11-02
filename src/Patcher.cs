@@ -56,6 +56,7 @@ internal static class Patcher
         .. SceneBucketRemove.Patches,
         .. PhysicsToiScan.Patches,
         .. ZoomSubscribers.Patches,
+        .. DestroyingBodySubscribers.Patches,
         .. ConstructionFloodSkip.Patches,
         .. SpCatchUp.Patches,
         .. TickBudget.Patches,
