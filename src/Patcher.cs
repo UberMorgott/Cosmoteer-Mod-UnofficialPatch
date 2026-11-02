@@ -60,6 +60,7 @@ internal static class Patcher
         .. ConstructionFloodSkip.Patches,
         .. SpCatchUp.Patches,
         .. TickBudget.Patches,
+        .. FastParallelStats.Patches,
         (PlayerMoney.Target, typeof(PlayerMoney)),
         (PlayerMoneyFlush.Target, typeof(PlayerMoneyFlush)),
         .. MissionTrade.Targets.Select(t => ((MethodBase)t.Target, typeof(MissionTrade))),
@@ -102,6 +103,7 @@ internal static class Patcher
             if (BlueprintToggleUpdates.Requested) _ = BlueprintToggleUpdates.Initialize();
             if (SmoothedActiveSet.Requested) _ = SmoothedActiveSet.Initialize();
             if (AtlasRangeUpload.Requested) _ = AtlasRangeUpload.Initialize();
+            FastParallelStats.ApplyThreads();
             if (ParallelIdleParking.Requested) _ = ParallelIdleParking.Initialize();
             if (CullCadence.Requested) _ = CullCadence.Initialize();
             if (RaycastScratch.Requested) _ = RaycastScratch.Initialize();
