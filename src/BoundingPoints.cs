@@ -81,7 +81,7 @@ internal static class BoundingPoints
         }
     }
 
-    [ThreadStatic] private static object?[]? t_grid;
+    [ThreadStatic] private static object?[]? _threadGrid;
 
     /// <summary>
     /// _partsByCell copied into a dense array over its bounding box: one pass over the entries instead of up to twelve hash
@@ -92,7 +92,7 @@ internal static class BoundingPoints
     {
         private readonly Dictionary<IntVector2, TPart> _map;
         private readonly object?[]? _cells;
-        private readonly int _minX, _minY, _width, _height;
+        private readonly long _minX, _minY, _width, _height;
 
         internal Grid(Dictionary<IntVector2, TPart> map)
         {
@@ -112,15 +112,15 @@ internal static class BoundingPoints
             if (width > 1 << 16 || height > 1 << 16) return; // huge coordinates: keep the dictionary (and no overflow below)
             long area = width * height;
             if (area > 4L * map.Count + 4096) return; // shortcut: sparse map stays on the dictionary
-            object?[] cells = t_grid ??= new object?[4096];
-            if (cells.Length < area) t_grid = cells = new object?[Math.Max(area, cells.Length * 2)];
+            object?[] cells = _threadGrid ??= new object?[4096];
+            if (cells.Length < area) _threadGrid = cells = new object?[Math.Max(area, cells.Length * 2)];
             foreach (KeyValuePair<IntVector2, TPart> kv in map)
                 cells[(kv.Key.Y - minY) * width + (kv.Key.X - minX)] = kv.Value;
             _cells = cells;
             _minX = minX;
             _minY = minY;
-            _width = (int)width;
-            _height = (int)height;
+            _width = width; // <= 65536, see above
+            _height = height;
         }
 
         /// <summary>
@@ -138,8 +138,8 @@ internal static class BoundingPoints
             }
             else
             {
-                int gx = x - _minX, gy = y - _minY;
-                if ((uint)gx >= (uint)_width || (uint)gy >= (uint)_height) return true;
+                long gx = x - _minX, gy = y - _minY;
+                if ((ulong)gx >= (ulong)_width || (ulong)gy >= (ulong)_height) return true;
                 part = (CommonBasePart?)_cells[gy * _width + gx]; // never cast to TPart: shared code may run for BlueprintPart
                 if (part == null) return true;
             }
@@ -150,7 +150,7 @@ internal static class BoundingPoints
         /// <summary>Drops the part references (the array is reused by this thread).</summary>
         internal void Release()
         {
-            if (_cells != null) Array.Clear(_cells, 0, _width * _height);
+            if (_cells != null) _cells.AsSpan(0, (int)(_width * _height)).Clear(); // <= the array length
         }
     }
 }

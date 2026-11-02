@@ -77,7 +77,7 @@ internal static class PhysicsToiScan
 
     private static readonly FastParallelAction ClassifyBatch = (from, to, data) =>
     {
-        var scratch = (Scratch)data;
+        if (data is not Scratch scratch) return; // always a Scratch (ClassifyAll)
         Contact[] contacts = scratch.Reversed;
         byte[] kind = scratch.Kind;
         for (int i = from; i < to; i++) kind[i] = Classify(contacts[i]);
@@ -90,8 +90,8 @@ internal static class PhysicsToiScan
         Fixture fixtureA = c.FixtureA;
         Fixture fixtureB = c.FixtureB;
         if (fixtureA.IsSensor || fixtureB.IsSensor) return Skip;
-        Body body = fixtureA.Body;
-        Body body2 = fixtureB.Body;
+        Body body = fixtureA.Body ?? throw new InvalidOperationException("contact fixture without body"); // vanilla would throw too
+        Body body2 = fixtureB.Body ?? throw new InvalidOperationException("contact fixture without body");
         BodyType bodyType = body.BodyType;
         BodyType bodyType2 = body2.BodyType;
         bool flag = body.Awake && bodyType != BodyType.Static;
@@ -154,7 +154,7 @@ internal static class PhysicsToiScan
         _classified += s.Count;
         if (s.Count >= ParallelThreshold) _parallelPasses++;
         if (s.Count >= ParallelThreshold && FastParallel.IsRunning && FastParallel.ThreadCount > 0)
-            FastParallel.For(0, s.Count, ClassifyBatch, s, copyStackData: false, null, "SolveTOI");
+            FastParallel.For(0, s.Count, ClassifyBatch, s);
         else
             ClassifyBatch(0, s.Count, s);
     }
@@ -212,8 +212,8 @@ internal static class PhysicsToiScan
                     {
                         Fixture fixtureA = next2.FixtureA;
                         Fixture fixtureB = next2.FixtureB;
-                        Body body = fixtureA.Body;
-                        Body body2 = fixtureB.Body;
+                        Body body = fixtureA.Body ?? throw new InvalidOperationException("contact fixture without body");
+                        Body body2 = fixtureB.Body ?? throw new InvalidOperationException("contact fixture without body");
                         float alpha = body._sweep.Alpha0;
                         if (body._sweep.Alpha0 < body2._sweep.Alpha0)
                         {
@@ -244,8 +244,8 @@ internal static class PhysicsToiScan
                 if (contact == null || 0.9999988f < num) break;
                 Fixture fixtureA2 = contact.FixtureA;
                 Fixture fixtureB2 = contact.FixtureB;
-                Body body3 = fixtureA2.Body;
-                Body body4 = fixtureB2.Body;
+                Body body3 = fixtureA2.Body ?? throw new InvalidOperationException("contact fixture without body");
+                Body body4 = fixtureB2.Body ?? throw new InvalidOperationException("contact fixture without body");
                 Sweep sweep = body3._sweep;
                 Sweep sweep2 = body4._sweep;
                 body3.Advance(num);

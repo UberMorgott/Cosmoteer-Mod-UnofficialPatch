@@ -134,19 +134,19 @@ internal static class SceneBucketRemove
     /// <summary>Vanilla <c>BucketList.Add</c>; an object whose runtime type overrides Equals turns the fast path off first.</summary>
     internal static void AddChecked<T>(BucketList<T> buckets, int bucket, T value) where T : class
     {
-        if (_referenceEquality && value != null && CheckedTypes.GetOrAdd(value.GetType(), OverridesEquals))
+        if (_referenceEquality && CheckedTypes.GetOrAdd(value.GetType(), OverridesEquals))
         {
             _referenceEquality = false;
             Log.Info($"SceneBucketRemove: {value.GetType().FullName} overrides Equals; bucket removal stays vanilla.");
         }
-        buckets.Add(bucket, value!);
+        buckets.Add(bucket, value);
     }
     /// <summary>Vanilla <c>BucketList.Remove(bucket, value)</c>, the element found by reference.</summary>
     internal static bool Remove<T>(BucketList<T> buckets, int bucket, T value) where T : class
     {
-        // A one-element bucket is dropped by vanilla itself (cheap); null or a foreign Equals keeps vanilla.
-        if (!_referenceEquality || value == null || !buckets._bucketsByKey.TryGetValue(bucket, out TempList<T>? list) || list.Count <= 1)
-            return buckets.Remove(bucket, value!);
+        // A one-element bucket is dropped by vanilla itself (cheap); a foreign Equals keeps vanilla. Callers pass `this` (never null).
+        if (!_referenceEquality || !buckets._bucketsByKey.TryGetValue(bucket, out TempList<T>? list) || list.Count <= 1)
+            return buckets.Remove(bucket, value);
         Span<T> items = CollectionsMarshal.AsSpan(list);
         for (int i = 0; i < items.Length; i++)
         {

@@ -7,3 +7,6 @@ extend-exclude = ["strings/*.rules", "!strings/en.rules", "docs/workshop/*.txt",
 Uncomitted = "Uncomitted"
 # .NET GC mode name (Dynamic Adaptation To Application Sizes).
 DATAS = "DATAS"
+# Box2D time of impact (World.SolveTOI, TOIFlag, PhysicsToiScan).
+TOI = "TOI"
+Toi = "Toi"
