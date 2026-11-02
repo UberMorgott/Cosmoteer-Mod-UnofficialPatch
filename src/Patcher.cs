@@ -54,6 +54,7 @@ internal static class Patcher
         .. HullRemovalSkip.Patches,
         .. DecalLookup.Patches,
         .. SceneBucketRemove.Patches,
+        .. PhysicsToiScan.Patches,
         .. SpCatchUp.Patches,
         .. TickBudget.Patches,
         (PlayerMoney.Target, typeof(PlayerMoney)),
