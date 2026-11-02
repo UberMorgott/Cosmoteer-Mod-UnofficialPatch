@@ -70,6 +70,7 @@ internal static class PhysicsToiScan
     {
         internal Contact[] Reversed = new Contact[256]; // list order = Reversed[Count-1] .. Reversed[0]
         internal byte[] Kind = new byte[256];
+        internal float[] Toi = new float[256]; // _toi of Cached contacts, read during classification
         internal int Count;
     }
 
@@ -80,7 +81,14 @@ internal static class PhysicsToiScan
         if (data is not Scratch scratch) return; // always a Scratch (ClassifyAll)
         Contact[] contacts = scratch.Reversed;
         byte[] kind = scratch.Kind;
-        for (int i = from; i < to; i++) kind[i] = Classify(contacts[i]);
+        float[] toi = scratch.Toi;
+        for (int i = from; i < to; i++)
+        {
+            Contact c = contacts[i];
+            byte k = Classify(c);
+            kind[i] = k;
+            if (k == Cached) toi[i] = c._toi; // a pass writes _toi only of Evaluate contacts
+        }
     };
     /// <summary>Vanilla's per-contact checks before the sweep advance, as a pure read.</summary>
     internal static byte Classify(Contact c)
@@ -130,6 +138,7 @@ internal static class PhysicsToiScan
         {
             Array.Resize(ref s.Reversed, Math.Max(total, s.Reversed.Length * 2));
             s.Kind = new byte[s.Reversed.Length];
+            s.Toi = new float[s.Reversed.Length];
         }
         // The list starts with the newest contacts: fill the new tail so that list order is preserved when read backwards.
         Contact c = manager.ContactList.Next;
@@ -198,6 +207,7 @@ internal static class PhysicsToiScan
                 float num = 1f;
                 Contact[] contacts = scratch.Reversed;
                 byte[] kind = scratch.Kind;
+                float[] toiCache = scratch.Toi;
                 for (int i = scratch.Count - 1; i >= 0; i--)
                 {
                     byte k = kind[i];
@@ -206,7 +216,7 @@ internal static class PhysicsToiScan
                     float num2;
                     if (k == Cached)
                     {
-                        num2 = next2._toi;
+                        num2 = toiCache[i];
                     }
                     else
                     {
