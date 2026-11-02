@@ -55,3 +55,8 @@ Goal: 40-100 ship battle, x8 >= 60 FPS, no spikes. Stay inside the tick (Track B
 ## Next
 - Beams (EmitBeams 6.7 ms/tick): decide generalize BeamParallel (creative SP only today) vs other.
 - DestroyingBody multicast (sim-relevant order: careful), adjacency iterators, 100-ship scenario `out\trackA\fleet-combat-100-x8.json`.
+
+## Merge
+- detci 10 arms (ref, aa1, aa2, cores1, cores2, noavx512, noavx2, nohwi, tc0, pgo0) on det-x8 with mod-v5: all identical to ref (report out\trackA\detci2\reports\detci-det-x8-20261102-125155.json).
+- Rebased on main b816c4d (Track B tick budget), qgate -All -Full green, 556 tests pass, main fast-forwarded to 4bda2fe. Not pushed.
+- Remaining gap: x8 40 ships ~8-9 FPS / ~23 ticks/s vs 240 target; top remaining main-thread items: EmitBeams (~24% of FixedUpdate), hit effects (chain lightning, damage -> part removal), ship split (StructureContiguity), FastParallel main share, delegate-removal allocations (DestroyingBody).
