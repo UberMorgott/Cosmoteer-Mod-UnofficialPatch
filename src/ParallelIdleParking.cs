@@ -16,7 +16,7 @@ namespace Performance;
 internal static class ParallelIdleParking
 {
     internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_IDLE_PARK"));
-    internal static bool IsRequested(string? value) => value == "1";
+    internal static bool IsRequested(string? value) => value != "0";
     private static readonly IdleGate Idle = new(static () => FastParallel.IsRunning, 8, 10);
     private static readonly Type PoolType = AccessTools.Field(typeof(FastParallel), "s_liveTasks").FieldType.GetGenericTypeDefinition();
     private static bool _attempted;
@@ -80,7 +80,7 @@ internal static class ParallelIdleParking
             _director = director;
             _director.FrameStarting += OnFrameStarting;
             Idle.Enable();
-            Log.Info("Parallel idle parking active: epoch-notified outer worker wait (PERFORMANCE_IDLE_PARK=1)");
+            Log.Info("Parallel idle parking active: epoch-notified outer worker wait (off: PERFORMANCE_IDLE_PARK=0)");
             return true;
         }
         catch (Exception ex)
@@ -103,10 +103,14 @@ internal static class ParallelIdleParking
         {
             if (!IsDependency(method)) continue;
             Patches? patches = Harmony.GetPatchInfo(method);
-            if (patches == null || patches.Owners.Any(owner => owner != Patcher.HarmonyId)) return false;
+            if (patches == null || patches.Postfixes.Concat(patches.Transpilers).Concat(patches.InnerPrefixes).Concat(patches.InnerPostfixes).Any(Foreign) ||
+                patches.Prefixes.Any(p => Foreign(p) && !BeamFrozen.BenchPhaseTiming(method, p.owner, KnownLoaderPatches.Kind.Prefix, p.PatchMethod)) ||
+                patches.Finalizers.Any(p => Foreign(p) && !BeamFrozen.BenchPhaseTiming(method, p.owner, KnownLoaderPatches.Kind.Finalizer, p.PatchMethod))) return false;
         }
         return true;
     }
+
+    private static bool Foreign(Patch patch) => patch.owner != Patcher.HarmonyId;
 
     internal static void CheckCompatibility()
     {

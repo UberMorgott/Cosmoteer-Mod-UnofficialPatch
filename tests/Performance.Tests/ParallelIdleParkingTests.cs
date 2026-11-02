@@ -18,12 +18,12 @@ namespace Performance.Tests;
 public class ParallelIdleParkingTests
 {
     [Theory]
-    [InlineData(null, false)]
-    [InlineData("", false)]
+    [InlineData(null, true)]
+    [InlineData("", true)]
     [InlineData("0", false)]
     [InlineData("1", true)]
-    [InlineData("true", false)]
-    public void ExplicitOptInOnly(string? value, bool expected) => Assert.Equal(expected, ParallelIdleParking.IsRequested(value));
+    [InlineData("true", true)]
+    public void OnByDefaultWithZeroKillSwitch(string? value, bool expected) => Assert.Equal(expected, ParallelIdleParking.IsRequested(value));
 
     [Fact]
     public void InstalledBodiesPinnedAndOnlyOuterSpinRewritten()
@@ -229,6 +229,20 @@ public class ParallelIdleParkingTests
             FastParallel.For(0, 31, (first, last, _) => Interlocked.Add(ref resumed, last - first), batchSize: 1);
             Assert.Equal(31, resumed);
             Assert.True(SpinWait.SpinUntil(() => ParallelIdleParking.ParkCalls >= 6, 3000));
+            var bench = new Harmony(BeamFrozen.BenchPhaseTimingOwner);
+            try
+            {
+                Type timing = typeof(Bench.FramePhaseTiming);
+                bench.Patch(AccessTools.Method(typeof(FastParallel), nameof(FastParallel.For)),
+                    prefix: new HarmonyMethod(timing, "ForPrefix"), finalizer: new HarmonyMethod(timing, "ForFinalizer"));
+                bench.Patch(AccessTools.GetDeclaredMethods(typeof(FastParallel)).Single(m => m.Name.Contains("g___WaitUntilFinished|", StringComparison.Ordinal)),
+                    prefix: new HarmonyMethod(timing, "WaitPrefix"), finalizer: new HarmonyMethod(timing, "WaitFinalizer"));
+                ParallelIdleParking.CheckCompatibility(); // exact bench phase-timing hooks are accepted; others are not
+                Assert.True(ParallelIdleParking.Ready, ParallelIdleParking.FailureReason);
+                FastParallel.For(0, 31, (first, last, _) => Interlocked.Add(ref resumed, last - first), batchSize: 1);
+                Assert.Equal(62, resumed);
+            }
+            finally { bench.UnpatchAll(bench.Id); }
             var foreign = new Harmony("performance.tests.idle-foreign");
             try
             {
@@ -240,7 +254,7 @@ public class ParallelIdleParkingTests
             finally { foreign.UnpatchAll(foreign.Id); }
             Assert.False(ParallelIdleParking.Ready);
             FastParallel.For(0, 29, (first, last, _) => Interlocked.Add(ref resumed, last - first), batchSize: 1);
-            Assert.Equal(60, resumed);
+            Assert.Equal(91, resumed);
             FastParallel.Stop();
             Assert.False(ParallelIdleParking.Initialize()); // already-created forever workers cannot be opted back in.
         }

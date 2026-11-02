@@ -153,7 +153,7 @@ internal static class BeamFrozen
 
     /// <summary>
     /// Foreign Harmony patches on the game or Halfling modules make the sim unbound (native), as for BeamParallel. The only
-    /// exemption is the bench's phase timing (<see cref="BenchPhaseTiming"/>): a prefix + finalizer pair on FastParallel.For and
+    /// exemption is the bench's phase timing (<see cref="BenchPhaseTiming(KnownLoaderPatches.Registration)"/>): a prefix + finalizer pair on FastParallel.For and
     /// its wait loop that only reads timestamps.
     /// </summary>
     internal static bool Compatible(out string? error)
@@ -186,17 +186,19 @@ internal static class BeamFrozen
 
     /// <summary>Exactly the bench phase-timing registrations: owner, target (FastParallel.For or its _WaitUntilFinished local
     /// function), hook kind and hook method (Bench.FramePhaseTiming.ForPrefix/ForFinalizer/WaitPrefix/WaitFinalizer).</summary>
-    internal static bool BenchPhaseTiming(KnownLoaderPatches.Registration r)
+    internal static bool BenchPhaseTiming(KnownLoaderPatches.Registration r) => r.InnerMethod == null && BenchPhaseTiming(r.Target, r.Owner, r.HookKind, r.Hook);
+
+    internal static bool BenchPhaseTiming(MethodBase target, string owner, KnownLoaderPatches.Kind kind, MethodInfo hook)
     {
-        if (r.Owner != BenchPhaseTimingOwner || r.InnerMethod != null || r.Hook.DeclaringType?.FullName != BenchPhaseTimingType) return false;
+        if (owner != BenchPhaseTimingOwner || hook.DeclaringType?.FullName != BenchPhaseTimingType) return false;
         string prefix;
-        if (SameMethod(r.Target, FastParallelFor)) prefix = "For";
-        else if (r.Target.DeclaringType == typeof(FastParallel) && r.Target.Name.Contains("g___WaitUntilFinished|", StringComparison.Ordinal)) prefix = "Wait";
+        if (SameMethod(target, FastParallelFor)) prefix = "For";
+        else if (target.DeclaringType == typeof(FastParallel) && target.Name.Contains("g___WaitUntilFinished|", StringComparison.Ordinal)) prefix = "Wait";
         else return false;
-        return r.HookKind switch
+        return kind switch
         {
-            KnownLoaderPatches.Kind.Prefix => r.Hook.Name == prefix + "Prefix",
-            KnownLoaderPatches.Kind.Finalizer => r.Hook.Name == prefix + "Finalizer",
+            KnownLoaderPatches.Kind.Prefix => hook.Name == prefix + "Prefix",
+            KnownLoaderPatches.Kind.Finalizer => hook.Name == prefix + "Finalizer",
             _ => false,
         };
     }
