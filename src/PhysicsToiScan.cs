@@ -145,13 +145,25 @@ internal static class PhysicsToiScan
         return c == manager.ContactList ? null : c;
     }
 
+    // Main thread only; logged every 60 s so the threshold and the pass count can be checked in game logs.
+    private static long _calls, _passes, _classified, _parallelPasses, _lastLog = System.Diagnostics.Stopwatch.GetTimestamp();
+
     private static void ClassifyAll(Scratch s)
     {
+        _passes++;
+        _classified += s.Count;
+        if (s.Count >= ParallelThreshold) _parallelPasses++;
         if (s.Count >= ParallelThreshold && FastParallel.IsRunning && FastParallel.ThreadCount > 0)
             FastParallel.For(0, s.Count, ClassifyBatch, s, copyStackData: false, null, "SolveTOI");
         else
             ClassifyBatch(0, s.Count, s);
     }
+    private static void LogStats()
+    {
+        _lastLog = System.Diagnostics.Stopwatch.GetTimestamp();
+        Log.Info(FormattableString.Invariant($"PhysicsToiScan: {_calls} steps, {_passes / (double)_calls:F2} passes/step, {_classified / (double)Math.Max(1, _passes):F0} contacts/pass, {_parallelPasses} parallel passes"));
+    }
+
     /// <summary>Vanilla World.SolveTOI; the contact scan reads the parallel classification.</summary>
     internal static void Solve(World world, ref TimeStep step, ref SolverIterations iterations)
     {
@@ -174,6 +186,7 @@ internal static class PhysicsToiScan
             }
         }
         Scratch scratch = Pool.Count > 0 ? Pool.Pop() : new Scratch();
+        if (++_calls % 64 == 0 && System.Diagnostics.Stopwatch.GetElapsedTime(_lastLog).TotalSeconds >= 60) LogStats();
         Sync(scratch, contactManager, rebuild: true);
         try
         {
