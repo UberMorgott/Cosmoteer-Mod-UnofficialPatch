@@ -53,6 +53,7 @@ internal static class Patcher
         .. BoundingPoints.Patches,
         .. HullRemovalSkip.Patches,
         .. DecalLookup.Patches,
+        .. SceneBucketRemove.Patches,
         .. SpCatchUp.Patches,
         .. TickBudget.Patches,
         (PlayerMoney.Target, typeof(PlayerMoney)),
@@ -104,6 +105,7 @@ internal static class Patcher
             if (BeamParallel.Requested) _ = BeamParallel.Initialize();
             if (BeamFrozen.Requested) _ = BeamFrozen.Initialize();
             if (GlowQuantize.Requested) _ = GlowQuantize.Initialize();
+            if (SceneBucketRemove.Requested) SceneBucketRemove.Initialize();
             // Diagnostic getter guards: installed apart from Patches (no R2R inliner rejit, skip instead of rollback).
             if (ViewDetect.Requested) _ = ViewDetect.Initialize(harmony);
             Log.Info($"Patched {patches.Count} methods + {inlinerCount} R2R inliners in {sw.ElapsedMilliseconds} ms");
@@ -135,6 +137,7 @@ internal static class Patcher
         ParallelIdleParking.Disable();
         AtlasRangeUpload.Disable();
         GlowQuantize.Disable();
+        SceneBucketRemove.Disable();
         ViewDetect.Disable();
         // Before unpatching: no compile callback may forward a detour that is being removed.
         if (!SharedGenericRetarget.Disable()) Log.Info("Performance: shared generic retarget listener could not be removed (inert).");
