@@ -60,3 +60,9 @@ Goal: 40-100 ship battle, x8 >= 60 FPS, no spikes. Stay inside the tick (Track B
 - detci 10 arms (ref, aa1, aa2, cores1, cores2, noavx512, noavx2, nohwi, tc0, pgo0) on det-x8 with mod-v5: all identical to ref (report out\trackA\detci2\reports\detci-det-x8-20261102-125155.json).
 - Rebased on main b816c4d (Track B tick budget), qgate -All -Full green, 556 tests pass, main fast-forwarded to 4bda2fe. Not pushed.
 - Remaining gap: x8 40 ships ~8-9 FPS / ~23 ticks/s vs 240 target; top remaining main-thread items: EmitBeams (~24% of FixedUpdate), hit effects (chain lightning, damage -> part removal), ship split (StructureContiguity), FastParallel main share, delegate-removal allocations (DestroyingBody).
+
+## Phase 2
+- Beams: BeamParallel=1 covers only 5.7-7.3 beams/tick (0.4-0.6 ms of 6.7 ms moved off-thread); fallbacks are prism chains / target graphs / StopEmission. Codex: waves prototype GO opt-in only, default-on MP NO-GO without full mutation/barrier + career audit. Not shipped.
+- 2f08a60 DestroyingBodySubscribers (OrderedEvent): det-x8 on/off identical (3000 ticks, effect hash); interleaved A/B (off,on,on,off) alloc MB/s -6.5%, GC pause -2%, FPS/ticks/s within noise (-2%, TickBudget-capped ~17 ticks/s at x8 now). Codex APPROVE.
+- 100 ships x8 (mod-v5, early combat): 4.9 FPS, 9.6 ticks/s, p50 152 ms, p99 1147 ms; main FixedUpdate 48% inside FastParallel regions (per-ship parallel buckets), Draw ~30% of main.
+- Hit effects / ship split parallel compute: not started (same MP audit scope as beams).
