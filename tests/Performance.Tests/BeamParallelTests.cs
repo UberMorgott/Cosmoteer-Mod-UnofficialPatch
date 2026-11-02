@@ -549,6 +549,60 @@ public sealed class BeamParallelTests
     }
 
     [Fact]
+    public void StopAdmission()
+    {
+        using var f = new Setup("operational");
+        BeamEmitter beam = f.Beams[0];
+        Set(beam, "<IsToggleOn>k__BackingField", true);
+        Assert.True(BeamParallel.StopAdmitted(beam, f.Sim, out string? reason), reason);
+        // A toggle listener can cascade into operational toggles or synchronous fires.
+        SetEvent(beam, "ToggleChanged", new EventHandler<EventArgs>((_, _) => { }));
+        Assert.False(BeamParallel.StopAdmitted(beam, f.Sim, out reason)); Assert.Contains("toggle", reason);
+        // Already off: StopEmission does not fire ToggleChanged.
+        Set(beam, "<IsToggleOn>k__BackingField", false);
+        Assert.True(BeamParallel.StopAdmitted(beam, f.Sim, out reason), reason);
+        // Value listeners are admitted as at the value event.
+        SetEvent(beam, "e_valueChanged", new EventHandler<EventArgs>((_, _) => { }));
+        Assert.False(BeamParallel.StopAdmitted(beam, f.Sim, out reason)); Assert.Contains("unknown value listener", reason);
+    }
+
+    /// <summary>With end media, StopEmission reads GetShipTarget and rule values first (BeamEmitter.cs:794-807): an unaudited getter is a barrier and is never invoked by the check.</summary>
+    [Fact]
+    public void StopWithEndMediaVetsItsGetters()
+    {
+        RecordingWeapon.Calls = 0;
+        using var f = new Setup("operational", beams: 2);
+        BeamEmitter beam = f.Beams[0];
+        Set(beam.Rules, "EndMediaEffects", Shell<Cosmoteer.Simulation.MediaEffects.MultiMediaEffectRules>());
+        Set(beam.Rules, "BeamMediaEffectsIntensity", Shell<ModifiableFloat>());
+        Set(beam.Rules, "RampUpTime", Shell<ModifiableTime>());
+        Assert.True(BeamParallel.StopAdmitted(beam, f.Sim, out string? reason), reason);
+        beam._getTargetFrom = Shell<RecordingWeapon>();
+        Assert.False(BeamParallel.StopAdmitted(beam, f.Sim, out reason)); Assert.Contains("target graph", reason);
+        beam._getTargetFrom = null;
+        Set(beam.Rules.RampUpTime, "Modifiers", new ValueModifier[] { Shell<RecordingModifier>() });
+        Assert.False(BeamParallel.StopAdmitted(beam, f.Sim, out reason)); Assert.Contains("end media", reason);
+        beam.Rules.RampUpTime.Modifiers = null;
+        beam._attachedBeamMediaEffectsTo = Shell<BeamEmitter>();
+        Assert.False(BeamParallel.StopAdmitted(beam, f.Sim, out reason)); Assert.Contains("attachment", reason);
+        Assert.Equal(0, RecordingWeapon.Calls);
+        using var session = f.Speculate(1);
+        BeamParallel.StopHook.Prefix(beam);
+        Assert.False(session.Session.Valid);
+    }
+
+    [Fact]
+    public void AdmittedStopKeepsTheRoundValid()
+    {
+        using var f = new Setup("operational", beams: 2);
+        using var session = f.Speculate(1);
+        BeamParallel.StopHook.Prefix(f.Beams[0]);
+        Assert.True(session.Session.Valid, f.Reasons());
+        SetEvent(f.Beams[0], "e_valueChanged", new EventHandler<EventArgs>((_, _) => { }));
+        BeamParallel.StopHook.Prefix(f.Beams[0]);
+        Assert.False(session.Session.Valid);
+    }
+    [Fact]
     public void UnadmittedListenerAtValueEventInvalidatesTheRound()
     {
         using var f = new Setup("operational", beams: 2);

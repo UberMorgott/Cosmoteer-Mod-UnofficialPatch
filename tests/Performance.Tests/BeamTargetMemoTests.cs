@@ -492,6 +492,35 @@ public sealed class BeamTargetMemoTests
         Assert.Equal(2, outerCalls); Assert.Equal(1, nestedCalls); Assert.True(scope.Query.Value.Invalid); Assert.False(scope.Query.Calling);
     }
 
+    [Fact]
+    public void TurretGraphIsVettedForBeamParallelOnly()
+    {
+        using var f = new Setup();
+        var turret = Shell<TurretWeapon>();
+        var rules = Shell<TurretWeaponRules>();
+        Set(turret, "<Part>k__BackingField", f.Part); Set(turret, "<Rules>k__BackingField", rules); turret._targetingEmitter = f.Receiver;
+        var targets = Shell<TargetManager>(); Set(targets, "<Weapon>k__BackingField", turret); Set(targets, "_targets", new List<WeaponTarget>());
+        Set(turret, "<ExplicitTargets>k__BackingField", targets);
+        f.Receiver._getTargetFrom = turret;
+        var q = new BeamTargetMemo.Query { Receiver = f.Receiver, Provider = turret, Sim = f.Sim, World = f.World };
+        bool Pure(bool secondary) { try { return BeamTargetMemo.PureBefore(q, secondary); } finally { q.RelevantCount = 0; } }
+
+        Assert.True(Pure(false));
+        Assert.False(Pure(true)); // the memo keeps its FixedWeapon-only audit
+        // Aimed target: exact ship accepted, anything else refused.
+        Set(turret, "<Target>k__BackingField", f.Ship); Assert.True(Pure(false));
+        Set(turret, "<Target>k__BackingField", Shell<Cosmoteer.Bullets.Bullet>()); Assert.False(Pure(false));
+        Set(turret, "<Target>k__BackingField", null);
+        // IsAutoFiring would call an arbitrary toggle unless the aimed target returns first.
+        Set(turret, "_autoFireToggle", Shell<Cosmoteer.Ships.Parts.Logic.PartStaticToggle>()); Assert.False(Pure(false));
+        Set(turret, "<Target>k__BackingField", f.Ship); Assert.True(Pure(false));
+        rules.AllowAimAtProhibitedTarget = true; Assert.False(Pure(false));
+        rules.AllowAimAtProhibitedTarget = false; Set(turret, "_autoFireToggle", null);
+        // Range and arc rules must be unmodified.
+        var range = Shell<ModifiableFloat>(); Set(rules, "ValidRange", range); Assert.True(Pure(false));
+        range.Modifiers = [Shell<BuffModifier>()]; Assert.False(Pure(false));
+    }
+
     private sealed class Scope : IDisposable
     {
         private readonly WeaponManager? _previous;

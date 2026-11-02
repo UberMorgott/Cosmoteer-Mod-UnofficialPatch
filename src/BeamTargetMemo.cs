@@ -483,16 +483,19 @@ internal static class BeamTargetMemo
     {
         q.RelevantCount = 0;
         BeamEmitter? receiver = q.Receiver;
-        if (!Exact<BeamEmitter>(receiver) || !Exact<FixedWeapon>(q.Provider) || q.Sim == null ||
+        // The turret graph is vetted for BeamParallel only (secondaryFilter: false); the memo stays FixedWeapon-only.
+        bool turret = !secondaryFilter && Exact<TurretWeapon>(q.Provider);
+        if (!Exact<BeamEmitter>(receiver) || !(turret || Exact<FixedWeapon>(q.Provider)) || q.Sim == null ||
             !ReferenceEquals(receiver._getTargetFrom, q.Provider) || q.Sim.GetType() != typeof(SimRoot) ||
             !Exact<GameRoot>(q.Sim.Game) || !Exact<CreativeSimModeManager>(q.Sim.Mode) ||
             !Exact<CreativeGameModeManager>(q.Sim.Game.Mode)) return false;
         Guid core = typeof(object).Module.ModuleVersionId;
         if (core != new Guid("77d2994f-32f8-4ff2-8313-7ebf44feba98") && core != new Guid("47f87616-cc44-40db-91db-a39140060003")) return false;
-        var provider = (FixedWeapon)q.Provider;
+        Weapon provider = q.Provider!; // exact FixedWeapon or TurretWeapon checked above
         if (!Exact<Part>(receiver.Part) || !Exact<Part>(provider.Part) ||
-            receiver.Rules.GetType() != typeof(BeamEmitterRules) || provider.Rules.GetType() != typeof(FixedWeaponRules) ||
+            receiver.Rules.GetType() != typeof(BeamEmitterRules) || provider.Rules.GetType() != (turret ? typeof(TurretWeaponRules) : typeof(FixedWeaponRules)) ||
             !Exact<BeamEmitter>(provider._targetingEmitter)) return false;
+        if (turret && !TurretGraph(q, (TurretWeapon)provider)) return false;
         var targeting = (BeamEmitter)provider._targetingEmitter;
         if (!Exact<Part>(targeting.Part) || targeting.Rules.GetType() != typeof(BeamEmitterRules) ||
             !AddShip(q, receiver.Part.Ship) || !AddShip(q, provider.Part.Ship) || !AddShip(q, targeting.Part.Ship)) return false;
@@ -538,6 +541,31 @@ internal static class BeamTargetMemo
         return Exact<World>(world) && ReferenceEquals(world, q.Sim.PhysicsWorld) && NativeWorldCallbacks(world) && Exact<ContactManager>(world.ContactManager) &&
             Exact<DynamicTreeBroadPhase<BodyFixtureProxy>>(world.ContactManager.BroadPhase);
     }
+    /// <summary>
+    /// TurretWeapon.GetFireTarget (TurretWeapon.cs:386-401) on top of the Weapon graph vetted above: the aimed Target, then
+    /// (no auto-fire toggle) the base explicit target plus IsTargetInArc. Range: GetTurretRange Valid/Normal (1248-1295)
+    /// with no stretch and unmodified ValidRange / targeting emitter range, coverage clamp; arc: GetBaseArc Valid/Normal
+    /// with unmodified ValidArc / FiringArc, coverage arc; HasSpecificPartInSights (Weapon.cs:1089) reads part geometry.
+    /// </summary>
+    private static bool TurretGraph(Query q, TurretWeapon turret)
+    {
+        TurretWeaponRules rules = turret.Rules;
+        ITarget? aimed = turret.Target;
+        if (Exact<Ship>(aimed)) { if (!AddShip(q, (Ship)aimed)) return false; }
+        else if (Exact<Part>(aimed)) { if (!SafePart((Part)aimed) || !AddShip(q, ((Part)aimed).Ship)) return false; }
+        else if (aimed != null) return false;
+        // IsAutoFiring reads an arbitrary toggle implementation; it is reached unless the aimed target is returned at once.
+        if (turret._autoFireToggle != null && (aimed == null || rules.AllowAimAtProhibitedTarget)) return false;
+        return Unmodified(rules.ValidRange) && Unmodified(rules.ValidArc) && Unmodified(rules.FiringArc);
+    }
+    private static bool Unmodified(object? value) => value switch
+    {
+        null => true,
+        ModifiableFloat f => Exact<ModifiableFloat>(f) && f.Modifiers is null or { Length: 0 },
+        ModifiableAngle a => Exact<ModifiableAngle>(a) && a.Modifiers is null or { Length: 0 },
+        _ => false,
+    };
+
     private static bool NativeWorldCallbacks(World world) =>
         NativeCallback(world._rayCastCallbackBroadPhaseWrapper, NativeBroadWrapper, world) &&
         NativeCallback(world._rayCastCallbackFixturePhaseWrapper, NativeFixtureWrapper, world);

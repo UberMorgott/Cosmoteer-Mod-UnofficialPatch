@@ -104,6 +104,7 @@ internal static class BeamParallel
     private static readonly MethodInfo ProxyListener = AccessTools.Method(typeof(BeamEmitterProxy), "OnEmitterValueChanged");
     private static readonly FieldInfo ValueChangedField = AccessTools.Field(typeof(BeamEmitter), "e_valueChanged");
     internal static readonly AccessTools.FieldRef<BeamEmitter, EventHandler<EventArgs>?> BeamValueChanged = AccessTools.FieldRefAccess<BeamEmitter, EventHandler<EventArgs>?>("e_valueChanged");
+    internal static readonly AccessTools.FieldRef<BeamEmitter, EventHandler<EventArgs>?> BeamToggleChanged = AccessTools.FieldRefAccess<BeamEmitter, EventHandler<EventArgs>?>("ToggleChanged");
     internal static readonly AccessTools.FieldRef<BeamEmitter, EventHandler<TriggerEventArgs>?> BeamTrigger = AccessTools.FieldRefAccess<BeamEmitter, EventHandler<TriggerEventArgs>?>("HitIntervalElapsed");
     private static readonly AccessTools.FieldRef<PartMultiValue, EventHandler<EventArgs>?> MultiValueChanged = AccessTools.FieldRefAccess<PartMultiValue, EventHandler<EventArgs>?>("ValueChanged");
     private static readonly AccessTools.FieldRef<BeamEmitterProxy, EventHandler<EventArgs>?> ProxyValueChanged = AccessTools.FieldRefAccess<BeamEmitterProxy, EventHandler<EventArgs>?>("ValueChanged");
@@ -467,7 +468,15 @@ internal static class BeamParallel
     }
 
     // One class per target: no injected __originalMethod and no allocation on the hot DoEffect path outside the window.
-    internal static class StopHook { public static void Prefix() { if (_active != null) Invalidate("StopEmission"); } }
+    // StopEmission writes its own emitter (re-checked at replay), media and the emitting list EmitBeams already copied;
+    // its listeners and the end-media getters are vetted by StopAdmitted.
+    internal static class StopHook
+    {
+        public static void Prefix(BeamEmitter __instance)
+        {
+            if (_active is { } s && !StopAdmitted(__instance, s.Sim, out string? why)) Invalidate("StopEmission: " + why);
+        }
+    }
     internal static class AttenuateHook { public static void Prefix() { if (_active != null) Invalidate("AttenuateBeam"); } }
     internal static class DieHook { public static void Prefix() { if (_active != null) Invalidate("BaseBulletDeath.Die"); } }
     internal static class EffectHook { public static void Prefix() { if (_active != null) Invalidate("immediate MultiHitEffectRules.DoEffect"); } }
@@ -604,8 +613,14 @@ internal static class BeamParallel
         if (beam._emissionTimeRemaining is not { } remaining) { Stats.Fallback("predict: no emission time"); return Prediction.StopTick; }
         if (remaining <= 0f)
         {
-            // 837-842: either StopEmission (a barrier) or the reset-delay branch, which needs the native fire checks.
-            Stats.Fallback(rules.InitHitLengthResetDelay > Halfling.Timing.Time.Zero ? "predict stop: reset delay gate" : "predict stop: StopEmission");
+            // 837-842: without a reset delay this beam just stops (no draw, no query); StopHook re-checks its listeners.
+            if (rules.InitHitLengthResetDelay <= Halfling.Timing.Time.Zero)
+            {
+                if (StopAdmitted(beam, s.Sim, out string? stopWhy)) return Prediction.Next;
+                Stats.Fallback("predict stop: StopEmission ", stopWhy);
+                return Prediction.StopTick;
+            }
+            Stats.Fallback("predict stop: reset delay gate"); // needs the native fire checks
             return Prediction.StopTick;
         }
         // Every implementation the calls below dispatch to is vetted first; an unknown one is never invoked.
@@ -649,12 +664,13 @@ internal static class BeamParallel
     [
         typeof(BuffModifier), typeof(ScaledBuffModifier), typeof(BuffRemapModifier), typeof(EffectScaleModifier), typeof(ScaledEffectScaleModifier),
     ];
-    /// <summary>Exact ModifiableFloat/ModifiableAngle whose modifiers only read buffs and the effect scale (no status sources).</summary>
+    /// <summary>Exact ModifiableFloat/ModifiableAngle/ModifiableTime whose modifiers only read buffs and the effect scale (no status sources).</summary>
     internal static bool SafeModifiable(object? value)
     {
         ValueModifier[]? modifiers;
         if (RuntimeType(value) == typeof(ModifiableFloat)) modifiers = ((ModifiableFloat)value!).Modifiers;
         else if (RuntimeType(value) == typeof(ModifiableAngle)) modifiers = ((ModifiableAngle)value!).Modifiers;
+        else if (RuntimeType(value) == typeof(ModifiableTime)) modifiers = ((ModifiableTime)value!).Modifiers;
         else return false;
         if (modifiers == null) return true;
         foreach (ValueModifier modifier in modifiers)
@@ -662,13 +678,17 @@ internal static class BeamParallel
         return true;
     }
 
-    /// <summary>GetWorldSpawnLoc/Dir (chained transforms) and the spread values, before any of them is called.</summary>
+    /// <summary>
+    /// GetWorldSpawnLoc/Dir (chained transforms) and the spread values, before any of them is called. Exact FixedWeapon and
+    /// TurretWeapon links use the base ChainablePartComponent transforms; TurretWeapon.GetRulesRotation (TurretWeapon.cs:1401)
+    /// reads only its aim fields, which bucket -4 never writes.
+    /// </summary>
     private static bool SpawnGraphVetted(BeamEmitter beam, [NotNullWhen(false)] out string? why)
     {
         why = null;
         ChainablePartComponent? chained = beam.ChainedComponent;
         for (int depth = 0; chained != null && why == null; depth++, chained = chained.ChainedComponent)
-            if (depth >= 8 || chained.GetType() != typeof(FixedWeapon)) why = "chained component";
+            if (depth >= 8 || (chained.GetType() != typeof(FixedWeapon) && chained.GetType() != typeof(TurretWeapon))) why = "chained component";
         if (why == null && (!SafeModifiable(beam.Rules.Spread.Min) || !SafeModifiable(beam.Rules.Spread.Max))) why = "spread modifier";
         return why == null;
     }
@@ -772,7 +792,7 @@ internal static class BeamParallel
     /// </summary>
     internal static bool PlayerKnown(SimRoot sim, int player) => player is -1 or -2 or -3 or -4 ||
         (sim.Game is { } game && game._playerStates.GetType() == typeof(SortedDictionary<int, PlayerState>) &&
-         ReferenceEquals(game._playerStates.Comparer, Comparer<int>.Default) && game._playerStates.ContainsKey(player));
+        ReferenceEquals(game._playerStates.Comparer, Comparer<int>.Default) && game._playerStates.ContainsKey(player));
 
     // ---------------------------------------------------------------------------------------------------------------------
     // Listener admission (lines 832, 948; HitIntervalElapsed at 929)
@@ -799,6 +819,34 @@ internal static class BeamParallel
                 if (!ProxyChain(proxy)) { reason = "proxy chain"; return false; }
             }
             else { reason = UnknownListener(target, listener.Method); return false; }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// StopEmission (BeamEmitter.cs:792-825): with EndMediaEffects it first reads the chained transform, GetShipTarget,
+    /// intensity, range and ramp-up values (794-807: vetted like a query, rule values unmodified-safe); then it fires
+    /// e_valueChanged (admitted like line 832) and, through IsToggleOn, ToggleChanged, whose listeners can cascade into
+    /// operational toggles or triggers, so any one is a barrier.
+    /// </summary>
+    internal static bool StopAdmitted(BeamEmitter beam, SimRoot sim, [NotNullWhen(false)] out string? reason)
+    {
+        if (!Admitted(beam, out reason)) return false;
+        BeamEmitterRules rules = beam.Rules;
+        if (rules.EndMediaEffects != null)
+        {
+            // The end effect anchors to _attachedBeamMediaEffectsTo ?? this; only the vetted own chain is admitted.
+            if (beam._attachedBeamMediaEffectsTo != null) { reason = "end media attachment"; return false; }
+            if (!SpawnGraphVetted(beam, out reason) || !QueryGraphVetted(beam, sim, out reason)) return false;
+            if (!SafeModifiable(rules.BeamMediaEffectsIntensity) || !SafeModifiable(rules.RampUpTime)) { reason = "end media values"; return false; }
+        }
+        if (beam.IsToggleOn && BeamToggleChanged(beam) is { } toggle)
+        {
+            foreach (EventHandler<EventArgs> listener in Delegate.EnumerateInvocationList(toggle))
+            {
+                reason = "toggle " + UnknownListener(listener.Target, listener.Method);
+                return false;
+            }
         }
         return true;
     }
