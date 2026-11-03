@@ -21,7 +21,7 @@ Diagnostics stay off: VIEW_DETECT, FP_STATS, FP_THREADS (pool-size experiment), 
 
 ## Workshop 0.2.19 release handoff (2026-11-03)
 
-Done: plain-language texts (no flag names, no kill-switch mention, no dev jargon) in `docs/workshop/*.txt` (8 langs) + in-game `mod.rules` Description; "Test system" block; 0.2.19 deployed locally (DLL sha256 07F023D6...CAA96 = HEAD 46ae2a8/ca99ffc build). Workshop NOT updated.
+Done: plain-language texts (no flag names, no kill-switch mention, no dev jargon) in `docs/workshop/*.txt` (8 langs) + in-game `mod.rules` Description; "Test system" block; 0.2.19 deployed locally (DLL sha256 12ACB9A9...C72CBD = 5ed5ccb build, after the default-on review deletions). Workshop NOT updated.
 
 - [ ] Clean rerun after reboot (quiet PC): `bench.exe` on `scenarios\fleet-combat.json` (x1) and the x8 copy (`speed: 8`), variants `base+fh,perf+fh`, `-def 'fh=BENCH_FRAME_HASH=1;BENCH_FRAME_HASH_EVERY=300;BENCH_RENDER_DET=1'` (draft script: scratchpad `ws2\run.ps1`, aborted on user stop).
 - [ ] TODO placeholders to refresh from that rerun: headline numbers (x1 18.4→28.9 FPS, 12.9→17.5 steps/s; x8 7.6→21.2 FPS, slowest 1% 276→133 ms; garbage -65%) in all 8 `docs/workshop/*.txt` + `mod.rules`; Test system line (CPU/RAM/GPU/OS/Cosmoteer 0.30.5 Steam build 26230688/mod version) if anything changed.
