@@ -17,10 +17,10 @@ using Cosmoteer.Simulation;
 using Halfling.Scene2D;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
-/// Live-read detector (decoupling spec §5, step S2 runtime part): debug-only, opt-in with <c>PERFORMANCE_VIEW_DETECT=1</c>.
+/// Live-read detector (decoupling spec §5, step S2 runtime part): debug-only, opt-in with <c>UNOFFICIAL_PATCH_VIEW_DETECT=1</c>.
 /// Off (the default) installs nothing: <see cref="Patches"/> is empty and <see cref="Initialize"/> returns at once.
 ///
 /// Phase flag: brackets (prefix + finalizer, restore on exit) on the main-thread frame entry points mark the render phases
@@ -36,8 +36,8 @@ namespace Performance;
 /// the hot path takes no <c>__originalMethod</c> (that allocates per call). Outside a render phase a guard is one static
 /// read. In a render phase it counts per getter and phase, and resolves the caller on sampled hits (all of the first
 /// <see cref="FullSampleHits"/>, then 1 in <see cref="SampleEvery"/>); the first <see cref="Detector.MaxStacksPerGuard"/>
-/// distinct callers per getter keep a call stack. Report: <c>Performance.view-detect-&lt;pid&gt;.md</c> next to
-/// Performance.log, rewritten every 10 s from the Draw bracket, at process exit and on rollback.
+/// distinct callers per getter keep a call stack. Report: <c>UnofficialPatch.view-detect-&lt;pid&gt;.md</c> next to
+/// UnofficialPatch.log, rewritten every 10 s from the Draw bracket, at process exit and on rollback.
 ///
 /// Shared generic code is never patched: a getter whose body is shared (__Canon) is skipped and listed in the report.
 /// Inlining: a guard sees only calls that reach the getter's entry point. Every guard is marked NoInlining, so callers
@@ -52,7 +52,7 @@ namespace Performance;
 /// </summary>
 internal static class ViewDetect
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_VIEW_DETECT"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_VIEW_DETECT"));
     internal static bool IsRequested(string? value) => value == "1";
 
     internal enum Phase
@@ -73,7 +73,7 @@ internal static class ViewDetect
     internal const long SampleEvery = 256;
     internal const string FastParallelThreadName = "FastParallel Pool";
     /// <summary>Known to <see cref="BlueprintToggleUpdates"/>' assembly scan, which otherwise pauses on unknown dynamic code.</summary>
-    internal const string GuardAssemblyName = "Performance.ViewDetectGuards";
+    internal const string GuardAssemblyName = "UnofficialPatch.ViewDetectGuards";
 
     /// <summary>
     /// Top getters by reaching roots in the S2 IL scan (scratchpad ilscan\report.json, all phase groups summed), in ilscan
@@ -451,7 +451,7 @@ internal static class ViewDetect
         return Enumerable.Range(0, count).Select(i => created.GetMethod("G" + i.ToString(CultureInfo.InvariantCulture))!).ToArray();
     }
 
-    internal static string ReportPath(Detector detector) => Path.Combine(Log.ModFolder, $"Performance.view-detect-{detector.ProcessId}.md");
+    internal static string ReportPath(Detector detector) => Path.Combine(Log.ModFolder, $"UnofficialPatch.view-detect-{detector.ProcessId}.md");
 
     /// <summary>Main thread, from the Draw bracket: rewrites the report at most every 10 s.</summary>
     internal static void MaybeFlush()
@@ -628,7 +628,7 @@ internal static class ViewDetect
         {
             var sb = new StringBuilder();
             CultureInfo c = CultureInfo.InvariantCulture;
-            sb.Append("# Performance view-detect report\n\n");
+            sb.Append("# Unofficial Patch view-detect report\n\n");
             sb.Append(c, $"pid {ProcessId}, started {Started:yyyy-MM-dd HH:mm:ss}, written {now:yyyy-MM-dd HH:mm:ss}. ");
             sb.Append(c, $"Guards installed {Guards.Count(g => g.Installed)}, skipped {Skipped.Count + Guards.Count(g => !g.Installed)}.\n");
             sb.Append(c, $"Counts are exact; callers are sampled (every hit up to {FullSampleHits} per getter, then 1 in {SampleEvery}). ");

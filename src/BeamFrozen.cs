@@ -26,12 +26,12 @@ using V = Halfling.Geometry.Vector2;
 using HitInfo = Cosmoteer.Ships.Parts.Weapons.BeamEmitter.HitInfo;
 using HitObject = Cosmoteer.Ships.Parts.Weapons.BeamEmitter.HitObject;
 using StructuralHitInfo = Cosmoteer.Ships.Parts.Weapons.BeamEmitter.StructuralHitInfo;
-using Record = Performance.BeamParallel.Record;
+using Record = UnofficialPatch.BeamParallel.Record;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
-/// Opt-in (<c>PERFORMANCE_BEAM_FROZEN=1</c>): bucket -4 (beam emission) with CHANGED, deterministic semantics, single player
+/// Opt-in (<c>UNOFFICIAL_PATCH_BEAM_FROZEN=1</c>): bucket -4 (beam emission) with CHANGED, deterministic semantics, single player
 /// only (multiplayer sims stay native until party-wide agreement on the setting exists). The result is deterministic, not
 /// equal to vanilla (spec: beam-design.md §9).
 /// <para/>
@@ -45,9 +45,9 @@ namespace Performance;
 /// </summary>
 internal static class BeamFrozen
 {
-    internal static readonly bool Requested = BeamParallel.IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_BEAM_FROZEN"));
-    /// <summary>Diagnostic (<c>PERFORMANCE_BEAM_FROZEN_ORACLE=1</c>): every query on the main thread through the serial path; results must equal the worker runs.</summary>
-    internal static readonly bool OracleRequested = Requested && BeamParallel.IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_BEAM_FROZEN_ORACLE"));
+    internal static readonly bool Requested = BeamParallel.IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BEAM_FROZEN"));
+    /// <summary>Diagnostic (<c>UNOFFICIAL_PATCH_BEAM_FROZEN_ORACLE=1</c>): every query on the main thread through the serial path; results must equal the worker runs.</summary>
+    internal static readonly bool OracleRequested = Requested && BeamParallel.IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BEAM_FROZEN_ORACLE"));
 
     private static int _ready;
     private static bool _attempted;
@@ -65,7 +65,7 @@ internal static class BeamFrozen
         _attempted = true;
         try
         {
-            if (BeamParallel.Requested) throw new NotSupportedException("PERFORMANCE_BEAM_FROZEN and PERFORMANCE_BEAM_PARALLEL are mutually exclusive");
+            if (BeamParallel.Requested) throw new NotSupportedException("UNOFFICIAL_PATCH_BEAM_FROZEN and UNOFFICIAL_PATCH_BEAM_PARALLEL are mutually exclusive");
             Director director = App.Director ?? throw new NotSupportedException("Beam frozen requires the native Director");
             BeamParallel.ValidateNative(); // file SHA, MVIDs and IL of every mirrored native method (DoEmitBeam, GetHitInfo, bucket loop, ...)
             Patches? info = Harmony.GetPatchInfo(BeamParallel.BucketTarget);
@@ -622,9 +622,9 @@ internal static class BeamFrozen
         internal static void Log(string label)
         {
             _lastLog = Stopwatch.GetTimestamp();
-            if (Ticks == 0) { Performance.Log.Info("Beam frozen " + label + ": no buckets"); return; }
+            if (Ticks == 0) { UnofficialPatch.Log.Info("Beam frozen " + label + ": no buckets"); return; }
             double ms = 1000.0 / Stopwatch.Frequency, n = Ticks;
-            Performance.Log.Info(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            UnofficialPatch.Log.Info(string.Create(System.Globalization.CultureInfo.InvariantCulture,
                 $"Beam frozen {label}: ticks {Ticks} records/tick {Records / n:F1} emit/tick {Emits / n:F1} worker/tick {WorkerReady / n:F1} serial/tick {Serial / n:F2} cancelled {Cancelled} attenuations {Attenuations} discarded-attenuations {DiscardedAttenuations} dropped-targets {DroppedTargets} | " +
                 $"ms/tick prepare {PrepTicks * ms / n:F3} query {QueryTicks * ms / n:F3} (worker query cpu {WorkerQueryTicks * ms / n:F3}) apply {ApplyTicks * ms / n:F3} | worker stops ") +
                 string.Join("; ", Stops.OrderByDescending(kv => kv.Value).Select(kv => kv.Key + "=" + kv.Value)));

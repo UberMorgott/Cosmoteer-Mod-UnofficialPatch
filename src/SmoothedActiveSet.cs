@@ -10,7 +10,7 @@ using Halfling.Scene2D;
 using Halfling.Timing;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// <c>PartSmoothedValue.SmoothedValueManager.Update</c> (update bucket 7) calls <c>UpdateValue</c> on every
@@ -29,11 +29,11 @@ namespace Performance;
 /// Values and outputs (including the radiator's thermal_load_dissipation network value) are those of vanilla: only calls
 /// that would be no-ops are skipped. Off (native) while a foreign Harmony patch touches a dependency; a changed game
 /// throws from <see cref="Initialize"/> so every patch rolls back. Raw reflection writes to the value fields are not covered.
-/// Set PERFORMANCE_SMOOTHED_ACTIVE_SET=0 to keep native updates for A/B comparison.
+/// Set UNOFFICIAL_PATCH_SMOOTHED_ACTIVE_SET=0 to keep native updates for A/B comparison.
 /// </summary>
 internal static class SmoothedActiveSet
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_SMOOTHED_ACTIVE_SET"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_SMOOTHED_ACTIVE_SET"));
     internal static bool IsRequested(string? value) => value != "0";
 
     internal static readonly MethodInfo Target = Method(typeof(PartSmoothedValue.SmoothedValueManager), "Update");

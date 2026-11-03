@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>Tiny append-only file log next to the mod DLL. Warnings are rate-limited per key.</summary>
 internal static class Log
@@ -16,10 +16,10 @@ internal static class Log
 
     public static void Init()
     {
-        _path = Path.Combine(ModFolder, "Performance.log");
+        _path = Path.Combine(ModFolder, "UnofficialPatch.log");
         try
         {
-            File.WriteAllText(_path, $"[{DateTime.Now:HH:mm:ss}] Performance log start{Environment.NewLine}");
+            File.WriteAllText(_path, $"[{DateTime.Now:HH:mm:ss}] Unofficial Patch log start{Environment.NewLine}");
         }
         catch
         {

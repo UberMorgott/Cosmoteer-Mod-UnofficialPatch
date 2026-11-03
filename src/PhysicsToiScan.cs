@@ -14,7 +14,7 @@ using System.Numerics;
 using Halfling.Physics2D.Common;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// After every physics step, <c>World.SolveTOI</c> (Box2D continuous collision) looks for the earliest time of impact:
@@ -29,22 +29,22 @@ namespace Performance;
 /// exactly as before. Nothing these checks read changes inside a pass (a sweep advance moves only C0/A0/Alpha0), so the
 /// chosen contact, every side effect and their order are identical. The contact list is mirrored in an array that is
 /// extended with the contacts FindNewContacts inserts at the list head (the world is locked: nothing is destroyed).
-/// Off: <c>PERFORMANCE_TOI_SCAN=0</c>.
+/// Off: <c>UNOFFICIAL_PATCH_TOI_SCAN=0</c>.
 /// <para/>
-/// Incremental (off: <c>PERFORMANCE_TOI_INCREMENTAL=0</c>): after the first pass only contacts whose result can have
+/// Incremental (off: <c>UNOFFICIAL_PATCH_TOI_INCREMENTAL=0</c>): after the first pass only contacts whose result can have
 /// changed are classified again: those of bodies the pass advanced, restored or solved (every contact field the pass
 /// writes belongs to their edges), of bodies whose classification inputs changed bit-for-bit (any callback), and new
 /// ones. "Evaluate" contacts become "cached" with the time the pass computed. Callback audit (contact.Update during TOI):
 /// Cosmoteer assigns no ContactManager Begin/End/Pre/PostSolve and no OnSeparation; OnCollision (bullet hits, arc
 /// shields) can change bodies (caught by the snapshot) but never Contact.Enabled/TOIFlag, Fixture.IsSensor/Body or
-/// shapes, and BodyType throws while the world is locked. Diag <c>PERFORMANCE_TOI_VERIFY=1</c> compares every pass
+/// shapes, and BodyType throws while the world is locked. Diag <c>UNOFFICIAL_PATCH_TOI_VERIFY=1</c> compares every pass
 /// against a full classification, uses the full result and counts mismatches in the stats log.
 /// </summary>
 internal static class PhysicsToiScan
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_TOI_SCAN"));
-    internal static bool Incremental = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_TOI_INCREMENTAL")); // tests flip it
-    internal static bool Verify = Environment.GetEnvironmentVariable("PERFORMANCE_TOI_VERIFY") == "1"; // tests set it
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_TOI_SCAN"));
+    internal static bool Incremental = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_TOI_INCREMENTAL")); // tests flip it
+    internal static bool Verify = Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_TOI_VERIFY") == "1"; // tests set it
     internal static long VerifyMismatches;
     internal static bool IsRequested(string value) => value != "0";
 

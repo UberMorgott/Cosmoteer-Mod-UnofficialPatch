@@ -54,10 +54,10 @@ using HitInfo = Cosmoteer.Ships.Parts.Weapons.BeamEmitter.HitInfo;
 using HitObject = Cosmoteer.Ships.Parts.Weapons.BeamEmitter.HitObject;
 using StructuralHitInfo = Cosmoteer.Ships.Parts.Weapons.BeamEmitter.StructuralHitInfo;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
-/// Opt-in (<c>PERFORMANCE_BEAM_PARALLEL=1</c>; SP and MP, audited modes only: <see cref="AuditedModes"/>): the beam hit queries of sim bucket -4 run in
+/// Opt-in (<c>UNOFFICIAL_PATCH_BEAM_PARALLEL=1</c>; SP and MP, audited modes only: <see cref="AuditedModes"/>): the beam hit queries of sim bucket -4 run in
 /// parallel before the bucket, and the native serial loop then uses each result only when every query input matches.
 /// <para/>
 /// Bucket -4 holds only the per-ship <c>WeaponManager.EmitBeams</c> proxies. At its start (<see cref="BucketHook"/>) the
@@ -78,10 +78,10 @@ namespace Performance;
 /// </summary>
 internal static class BeamParallel
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_BEAM_PARALLEL"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BEAM_PARALLEL"));
     internal static bool IsRequested(string? value) => value == "1";
     /// <summary>Differential mode: records are validated as usual but never substituted; the native result is compared bit for bit.</summary>
-    internal static readonly bool VerifyRequested = Requested && IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_BEAM_PARALLEL_VERIFY"));
+    internal static readonly bool VerifyRequested = Requested && IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BEAM_PARALLEL_VERIFY"));
     internal static bool Verify = VerifyRequested;
 
     private static int _ready;
@@ -1806,7 +1806,7 @@ internal static class BeamParallel
         internal static void Fallback(string reason)
         {
             long n = Reasons[reason] = Reasons.GetValueOrDefault(reason) + 1;
-            if (n == 1 && reason.StartsWith("session:", StringComparison.Ordinal)) Performance.Log.Info("Beam parallel no session: " + reason);
+            if (n == 1 && reason.StartsWith("session:", StringComparison.Ordinal)) UnofficialPatch.Log.Info("Beam parallel no session: " + reason);
         }
         private static readonly Dictionary<(string, string), string> Keys = new();
         /// <summary>Allocation-free after the first occurrence of each prefix/reason pair.</summary>
@@ -1831,9 +1831,9 @@ internal static class BeamParallel
         internal static void Log(string label)
         {
             _lastLog = Stopwatch.GetTimestamp();
-            if (Ticks == 0) { Performance.Log.Info("Beam parallel " + label + ": no sessions; reasons " + string.Join("; ", Reasons.Select(kv => kv.Key + "=" + kv.Value))); return; }
+            if (Ticks == 0) { UnofficialPatch.Log.Info("Beam parallel " + label + ": no sessions; reasons " + string.Join("; ", Reasons.Select(kv => kv.Key + "=" + kv.Value))); return; }
             double ms = 1000.0 / Stopwatch.Frequency, n = Ticks;
-            Performance.Log.Info(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            UnofficialPatch.Log.Info(string.Create(System.Globalization.CultureInfo.InvariantCulture,
                 $"Beam parallel {label}: verify {Verify} verified {Verified} (shield {VerifiedShield} penetrating {VerifiedPenetrating} secondary {VerifiedSecondary}) mismatches {VerifyMismatches} ticks {Ticks} records/tick {Records / n:F1} eligible/tick {Eligible / n:F1} accepted/tick {Accepted / n:F1} missed/tick {Missed / n:F2} wasted/tick {Wasted / n:F2} lost-to-fallback/tick {LostToFallback / n:F2} | " +
                 $"query ms/tick accepted {AcceptedQueryTicks * ms / n:F3} missed {MissedQueryTicks * ms / n:F3} wasted {WastedQueryTicks * ms / n:F3} | pre-bucket wall ms/tick {SessionTicks * ms / n:F3} (snapshot {SnapshotTicks * ms / n:F3}) | reasons ") +
                 string.Join("; ", Reasons.OrderByDescending(kv => kv.Value).Select(kv => kv.Key + "=" + kv.Value)));

@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>Removes boxed comparisons from concrete D3D11 constant updates without patching shared generic code.</summary>
 internal static class ShaderConstantBoxing

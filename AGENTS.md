@@ -1,4 +1,4 @@
-# Performance mod (unofficial patch): repo rules
+# Unofficial Patch mod: repo rules
 
 Workspace rules: `E:\DEV\cosmoteer\AGENTS.md`.
 

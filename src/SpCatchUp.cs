@@ -9,7 +9,7 @@ using Halfling;
 using Halfling.Timing;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Single player only. Every frame SPManager.Update (SPManager.cs:72) takes the real time the sim may advance this frame
@@ -27,11 +27,11 @@ namespace Performance;
 /// game still slows down and debt beyond the bound is dropped. Hence opt-in. Debug tick step / full throttle, pause, a
 /// game speed change (debt is real time; OnInputTick multiplies it by the new speed) and a new SPManager reset the debt
 /// and stay vanilla. Multiplayer, RecordableSPManager and GetTargetAdjustedDeltaTime itself are not patched.
-/// On: <c>PERFORMANCE_SP_CATCHUP=1</c>.
+/// On: <c>UNOFFICIAL_PATCH_SP_CATCHUP=1</c>.
 /// </summary>
 internal static class SpCatchUp
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_SP_CATCHUP"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_SP_CATCHUP"));
     internal static bool IsRequested(string? value) => value == "1";
 
     /// <summary>

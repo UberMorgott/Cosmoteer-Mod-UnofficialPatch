@@ -8,7 +8,7 @@ using Halfling.Geometry;
 using Halfling.Pooling;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Every sim tick, every awake ship refreshes its nebula state (SimShipsManager.UpdateShipsTree → RefreshShipPosition →
@@ -21,11 +21,11 @@ namespace Performance;
 /// the ship tracks no nebula: vanilla then finds no strength and sets each nebula type to 0, which is a no-op for a ship
 /// without tracked nebulas (ShipNebulasTracker.SetNebulaStrength adds nothing at 0, _shipsByNebulaType is untouched).
 /// The only other effect skipped is the lazy convex hull build, which other readers still do on demand from the same
-/// parts. Zero-strength cleanup of tracked nebulas runs as before. Off: <c>PERFORMANCE_NEBULA_TEMPLIST=0</c>.
+/// parts. Zero-strength cleanup of tracked nebulas runs as before. Off: <c>UNOFFICIAL_PATCH_NEBULA_TEMPLIST=0</c>.
 /// </summary>
 internal static class NebulaTempList
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_NEBULA_TEMPLIST"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_NEBULA_TEMPLIST"));
     internal static bool IsRequested(string? value) => value != "0";
 
     private const string IlSha256 = "3CC244994566922C9C4281533A9BD43A43183CCCC4F6CEBDCDE1A65ECF626B2E";

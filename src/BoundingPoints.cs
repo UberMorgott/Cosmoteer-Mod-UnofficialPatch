@@ -6,7 +6,7 @@ using Cosmoteer.Ships.Parts;
 using Halfling.Geometry;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Every time a ship gains or loses a part (in combat: every destroyed part) its convex hull is rebuilt on the next read
@@ -20,11 +20,11 @@ namespace Performance;
 /// neighbours keep vanilla's physical-rect test. Same parts, same corners, same order of points, so the hull and the
 /// bounding circle are bit-identical. The lookups read a dense per-call copy of _partsByCell over its bounding box (built in one pass)
 /// instead of hashing every neighbour cell. Patched once for CommonBasePartsManager&lt;Part&gt;; BlueprintPart and DestroyedPart share the same
-/// reference-type code. Off: <c>PERFORMANCE_BOUNDING_POINTS=0</c>.
+/// reference-type code. Off: <c>UNOFFICIAL_PATCH_BOUNDING_POINTS=0</c>.
 /// </summary>
 internal static class BoundingPoints
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_BOUNDING_POINTS"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BOUNDING_POINTS"));
     internal static bool IsRequested(string? value) => value != "0";
 
     private const string IlSha256 = "4B6DB94D272042AE90FF6229961999314ACC99809D2027CDED96678C47069250";

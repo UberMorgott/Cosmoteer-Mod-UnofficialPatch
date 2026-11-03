@@ -1,4 +1,4 @@
-# PERFORMANCE_SIM_THREAD: progress (branch perf/sim-thread, worktree E:\DEV\cosmoteer\Performance-wt-simthread)
+# UNOFFICIAL_PATCH_SIM_THREAD: progress (branch perf/sim-thread, worktree E:\DEV\cosmoteer\UnofficialPatch-wt-simthread)
 
 ## 2026-11-02 session 2 (user approved the big route)
 - Prior decision found: D:\tmp\claude\D--DEV\9ac2c577-a11b-46b1-8be9-60a5e3b36c61\scratchpad\TASKS-decouple.md + m1-spec.md
@@ -21,7 +21,7 @@
 - src\TickBudget.cs + SpCatchUp.DeltaTime: SP real dt per frame capped so game time <= ticks fitting
   budget = max(0.65*T, T - nonTickFrameWork) at EMA tick cost, floor = x1's game time this frame. Non-tick work =
   Director FrameStarting..FrameEnded minus ticks (Present/vsync excluded). Averages owned per SimRoot.
-  Default on in SP, PERFORMANCE_TICK_BUDGET=0 kills. MP untouched (lockstep pacing from host input ticks).
+  Default on in SP, UNOFFICIAL_PATCH_TICK_BUDGET=0 kills. MP untouched (lockstep pacing from host input ticks).
 - Codex: 2 BLOCK rounds (x8 slowed when it fits; vsync counted as work; cross-sim EMA) fixed -> GO.
 - Bench (fleet-combat, 40 ships, 60 s, user's settings TargetFps=FpsTarget30, 2 reps ABBA, contention ~24% other CPU
   from Track A): results D:\tmp\claude\E--DEV-cosmoteer\9f18e096-53d5-484c-a704-d95076b4c1de\scratchpad\bench-tb
@@ -36,7 +36,7 @@
     x8 to tick slower than x1. Only the sim thread removes the per-frame tick (and its spikes).
 - Determinism: fleet-combat-determinism at x8, budget off vs on: `bench -compare` identical over 100 samples,
   ticks 30..3000.
-- Bench c6e15e6: whitelists PERFORMANCE_TICK_BUDGET / PERFORMANCE_SIM_THREAD env (arms were rejected before).
+- Bench c6e15e6: whitelists UNOFFICIAL_PATCH_TICK_BUDGET / UNOFFICIAL_PATCH_SIM_THREAD env (arms were rejected before).
 
 ## Next
 - Commit T after bench + hash equal.

@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Game runs on net10.0 (Bin\Cosmoteer.runtimeconfig.json), so the mod targets net10.0 too.
+    lib\ holds publicized (stripped) copies of Cosmoteer.dll / HalflingCore.dll / HalflingPlatformWDX.dll (D3D11 backend) (target PublicizeGameAssemblies;
+    needs the global tool: dotnet tool install -g BepInEx.AssemblyPublicizer.Cli).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>UnofficialPatch</AssemblyName>
+    <RootNamespace>UnofficialPatch</RootNamespace>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <GameBin>D:\Steam\steamapps\common\Cosmoteer\Bin</GameBin>
+    <!-- Yet Another Mod Loader (workshop 3577650065): ships the only 0Harmony.dll the loader accepts. -->
+    <ModLoaderDir>D:\Steam\steamapps\workshop\content\799600\3577650065</ModLoaderDir>
+    <!-- tests\ is its own project; keep its sources and build output out of the mod. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <!-- Regenerate lib\ (gitignored) from the installed game when missing or older than the game DLL. -->
+  <Target Name="PublicizeGameAssemblies" BeforeTargets="ResolveAssemblyReferences"
+          Inputs="$(GameBin)\Cosmoteer.dll;$(GameBin)\HalflingCore.dll;$(GameBin)\HalflingPlatformWDX.dll"
+          Outputs="lib\Cosmoteer.dll;lib\HalflingCore.dll;lib\HalflingPlatformWDX.dll">
+    <Exec Command="assembly-publicizer &quot;$(GameBin)\Cosmoteer.dll&quot; &quot;$(GameBin)\HalflingCore.dll&quot; &quot;$(GameBin)\HalflingPlatformWDX.dll&quot; --strip -f -o &quot;$(MSBuildProjectDirectory)\lib&quot;"
+          EnvironmentVariables="DOTNET_ROLL_FORWARD=Major" />
+  </Target>
+
+  <ItemGroup>
+    <Reference Include="SharpDX">
+      <HintPath>$(GameBin)\SharpDX.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpDX.Direct3D11">
+      <HintPath>$(GameBin)\SharpDX.Direct3D11.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Cosmoteer">
+      <HintPath>lib\Cosmoteer.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="HalflingCore">
+      <HintPath>lib\HalflingCore.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="HalflingPlatformWDX">
+      <HintPath>lib\HalflingPlatformWDX.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!--
+      Compile against the loader-shipped Harmony 2.4.2 and do NOT copy it: YAML ModLoader only loads a 0Harmony.dll
+      whose MVID is dc2e7251-4b84-4883-90eb-eb05a041522c (its own build) and refuses any other copy ("incorrect GUID").
+      At runtime the loader puts that build into the default AssemblyLoadContext before calling GameLoadInitializer.
+    -->
+    <Reference Include="0Harmony">
+      <HintPath>$(ModLoaderDir)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="mod.rules" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="strings\*.rules" CopyToOutputDirectory="PreserveNewest" LinkBase="strings" />
+  </ItemGroup>
+</Project>

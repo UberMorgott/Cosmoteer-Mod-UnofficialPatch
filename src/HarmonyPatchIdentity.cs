@@ -8,7 +8,7 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 internal static class HarmonyPatchIdentity
 {

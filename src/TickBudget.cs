@@ -7,7 +7,7 @@ using Cosmoteer.Simulation;
 using Halfling;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Single player only. Above x1 vanilla hands the sim <c>speed x frame time</c> of game time per frame
@@ -21,11 +21,11 @@ namespace Performance;
 /// vanilla drops slow-frame time. Ticks, their order and inputs are unchanged; only which frame runs a tick moves.
 /// Speed x1 and below, pause, debug tick step / full throttle and multiplayer (lockstep pacing comes from the host's
 /// input ticks) are untouched. Composes with <see cref="SpCatchUp"/>: catch-up debt never pushes a frame past the cap.
-/// Off: <c>PERFORMANCE_TICK_BUDGET=0</c>.
+/// Off: <c>UNOFFICIAL_PATCH_TICK_BUDGET=0</c>.
 /// </summary>
 internal static class TickBudget
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_TICK_BUDGET"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_TICK_BUDGET"));
     internal static bool IsRequested(string? value) => value != "0";
 
     /// <summary>Least share of a 1/TargetFps frame the ticks may take, however expensive the rest of the frame is.</summary>

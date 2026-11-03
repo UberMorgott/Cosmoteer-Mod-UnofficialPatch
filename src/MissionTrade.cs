@@ -10,7 +10,7 @@ using Cosmoteer.Ships;
 using Cosmoteer.Ships.Crew.Jobs;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Vanilla desync: crew trade pickups/deliveries (ResourceTransferJob, ShipCrewManager bucket -13) call

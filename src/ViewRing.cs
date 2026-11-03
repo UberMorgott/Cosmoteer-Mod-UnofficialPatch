@@ -1,6 +1,6 @@
 using System.Threading;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Classic triple buffer with one atomic state word (decoupling spec §R2 "Ring linearisation", §R10 lease rules).

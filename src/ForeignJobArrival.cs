@@ -6,7 +6,7 @@ using System.Reflection.Emit;
 using Cosmoteer.Ships.Crew;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Vanilla race: ShipCrewManager (bucket -13, ships in parallel) runs a crew's job work inline only when the crew is on

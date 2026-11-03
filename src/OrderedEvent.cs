@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Replacement storage for one EventHandler&lt;EventArgs&gt; event with many short-lived subscribers: per owner, an ordered

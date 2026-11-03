@@ -7,7 +7,7 @@ using Cosmoteer.Ships.Parts.Effects;
 using Cosmoteer.Simulation.Cameras;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Every continuous part effect with a zoom limit (thrusters, glows...) subscribes to the camera's ZoomChanged event when
@@ -19,11 +19,11 @@ namespace Performance;
 /// camera event gets one forwarding handler that calls the subscribers in subscription order on a snapshot, as a multicast
 /// delegate does; remove takes the last equal handler like Delegate.Remove. Zoom handling is presentation only (media
 /// effect refresh) and runs in the same order. shortcut: a foreign ZoomChanged subscriber added between effect subscriptions
-/// is called after all of them (vanilla interleaves); the game itself has no other subscriber. Off: <c>PERFORMANCE_ZOOM_SUBSCRIBERS=0</c>.
+/// is called after all of them (vanilla interleaves); the game itself has no other subscriber. Off: <c>UNOFFICIAL_PATCH_ZOOM_SUBSCRIBERS=0</c>.
 /// </summary>
 internal static class ZoomSubscribers
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_ZOOM_SUBSCRIBERS"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_ZOOM_SUBSCRIBERS"));
     internal static bool IsRequested(string? value) => value != "0";
 
     private static readonly (string Name, string Sha256, string Accessor)[] Methods =

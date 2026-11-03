@@ -7,24 +7,24 @@ using Cosmoteer.Simulation;
 using Halfling.Performance;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
-/// Diagnostic only (<c>PERFORMANCE_FP_STATS=1</c>): turns on vanilla FastParallel profiling and logs, per top-level
+/// Diagnostic only (<c>UNOFFICIAL_PATCH_FP_STATS=1</c>): turns on vanilla FastParallel profiling and logs, per top-level
 /// parallel region, wall time, summed batch wall time per thread, main-thread share, the longest single batch and
 /// the first worker's join delay, to tell load imbalance from late worker arrival. Changes no sim state.
 /// </summary>
 internal static class FastParallelStats
 {
-    internal static readonly bool Requested = Environment.GetEnvironmentVariable("PERFORMANCE_FP_STATS") == "1";
+    internal static readonly bool Requested = Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_FP_STATS") == "1";
     internal static readonly MethodInfo Target = AccessTools.Method(typeof(SimRoot), nameof(SimRoot.Update), Type.EmptyTypes)
         ?? throw new MissingMethodException(nameof(SimRoot), "Update");
     internal static (MethodBase Target, Type Patch)[] Patches => Requested ? [(Target, typeof(FastParallelStats))] : [];
 
-    /// <summary>Experiment (<c>PERFORMANCE_FP_THREADS=N</c>): pool worker count; vanilla = physical cores - 1.</summary>
+    /// <summary>Experiment (<c>UNOFFICIAL_PATCH_FP_THREADS=N</c>): pool worker count; vanilla = physical cores - 1.</summary>
     internal static void ApplyThreads()
     {
-        if (!int.TryParse(Environment.GetEnvironmentVariable("PERFORMANCE_FP_THREADS"), out int n) || n < 1) return;
+        if (!int.TryParse(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_FP_THREADS"), out int n) || n < 1) return;
         if (FastParallel.s_createdThreads) { Log.Info("FP threads: workers already created"); return; }
         Log.Info($"FP threads: {FastParallel.ThreadCount} -> {n}");
         FastParallel.ThreadCount = n;

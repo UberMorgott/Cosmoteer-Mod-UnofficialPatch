@@ -5,7 +5,7 @@ using System.Reflection.Emit;
 using Cosmoteer.Ships.Parts.Thrusters;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Vanilla ThrusterManager.CalculateMaximumAccelerationAndRampTimeCached, on a cache miss, builds a

@@ -9,7 +9,7 @@ using System.Security.Cryptography;
 using System.Text;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Installs every patch, all-or-nothing; any failure rolls back all of this mod's patches and the game runs vanilla.
@@ -24,7 +24,7 @@ namespace Performance;
 /// </summary>
 internal static class Patcher
 {
-    public const string HarmonyId = "morgott.performance";
+    public const string HarmonyId = "morgott.unofficialpatch";
 
     /// <summary>Each target and its public static Prefix / Postfix / Transpiler / Finalizer (any subset).</summary>
     internal static (MethodBase Target, Type Patch)[] Patches =>
@@ -125,7 +125,7 @@ internal static class Patcher
         {
             Log.Error("patch", ex);
             RollBack(() => harmony.UnpatchAll(HarmonyId));
-            Log.Info("Performance DISABLED: patches rolled back, game runs vanilla.");
+            Log.Info("Unofficial Patch DISABLED: patches rolled back, game runs vanilla.");
             return false;
         }
     }
@@ -151,7 +151,7 @@ internal static class Patcher
         SceneBucketRemove.Disable();
         ViewDetect.Disable();
         // Before unpatching: no compile callback may forward a detour that is being removed.
-        if (!SharedGenericRetarget.Disable()) Log.Info("Performance: shared generic retarget listener could not be removed (inert).");
+        if (!SharedGenericRetarget.Disable()) Log.Info("Unofficial Patch: shared generic retarget listener could not be removed (inert).");
         try
         {
             unpatchAll();
@@ -162,7 +162,7 @@ internal static class Patcher
         }
         if (Harmony.HasAnyPatches(HarmonyId))
         {
-            Log.Info("Performance ERROR: rollback incomplete, some patches remain; game is NOT vanilla. Remove or update the mod.");
+            Log.Info("Unofficial Patch ERROR: rollback incomplete, some patches remain; game is NOT vanilla. Remove or update the mod.");
             throw new InvalidOperationException("patches of " + HarmonyId + " still present after UnpatchAll");
         }
     }
@@ -199,9 +199,9 @@ internal static class Patcher
             }
         }
         if (errors == null) return;
-        if (!SharedGenericRetarget.Disable()) Log.Info("Performance: shared generic retarget listener could not be removed (inert).");
-        Log.Info("Performance FATAL: a shared generic patch could not be removed after recompilation; stopping the game.");
-        throw new InvalidOperationException("Performance mod: failed to remove a shared generic patch that no longer intercepts its recompiled code", new AggregateException(errors));
+        if (!SharedGenericRetarget.Disable()) Log.Info("Unofficial Patch: shared generic retarget listener could not be removed (inert).");
+        Log.Info("Unofficial Patch FATAL: a shared generic patch could not be removed after recompilation; stopping the game.");
+        throw new InvalidOperationException("Unofficial Patch: failed to remove a shared generic patch that no longer intercepts its recompiled code", new AggregateException(errors));
     }
     /// <summary>Unchanged IL: patching alone recompiles the method without its stale inlined copy.</summary>
     public static IEnumerable<CodeInstruction> Rejit(IEnumerable<CodeInstruction> instructions) => instructions;

@@ -1,6 +1,6 @@
 using System;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 internal enum ViewApplyStatus
 {

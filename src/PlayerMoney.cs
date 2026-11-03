@@ -7,7 +7,7 @@ using Cosmoteer.Game;
 using Cosmoteer.Simulation;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Vanilla desync: PlayerState.AddMoney (<c>Money = clamp(Money + amount)</c>, unlocked; Money is in the integrity hash)

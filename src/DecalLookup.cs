@@ -9,7 +9,7 @@ using Cosmoteer.Ships;
 using Cosmoteer.Ships.Paint;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// DecalsManager.CopyDecalsFrom (onlyNeeded, called per decal layer from StructureContiguityManager.SplitIntoNewShips) looks
@@ -24,11 +24,11 @@ namespace Performance;
 /// indices have ordinally distinct names), so a key is in the tree iff its index is in the snapshot, with the same value.
 /// A miss, a null dictionary, a non-default comparer or a snapshot that could not be built call the native indexer, so the
 /// exception (KeyNotFoundException, or GetName's own for an unregistered index) is the native one. Iteration over the
-/// source decals is untouched. ID.CompareTo is not changed. Off: <c>PERFORMANCE_DECAL_LOOKUP=0</c>.
+/// source decals is untouched. ID.CompareTo is not changed. Off: <c>UNOFFICIAL_PATCH_DECAL_LOOKUP=0</c>.
 /// </summary>
 internal static class DecalLookup
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_DECAL_LOOKUP"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_DECAL_LOOKUP"));
     internal static bool IsRequested(string? value) => value != "0";
 
     private const string IlSha256 = "4AD4A8BEFA281F2F1D84CA29A8608473A51585481A8389649AA6AE2DD551645A";

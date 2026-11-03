@@ -13,7 +13,7 @@ using Cosmoteer.Source.Ships.Blueprints;
 using Halfling.Geometry;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Evaluates the exact native UIToggle leaf without a delegate invocation. Every value remains live. Harmony patch

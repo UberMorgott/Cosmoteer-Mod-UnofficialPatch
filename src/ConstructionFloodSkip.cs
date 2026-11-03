@@ -4,7 +4,7 @@ using Cosmoteer.Ships.Construction;
 using Halfling.Geometry;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// After a part is destroyed or removed, ConstructionManager.RefreshUnderlyingPartRemoves floods outward from its
@@ -12,11 +12,11 @@ namespace Performance;
 /// connected again, and on the way refreshes queued underlying-part removals and queued per-tile constructions. A ship
 /// with no queued removal and no queued construction has nothing to refresh, so the flood only computes and discards
 /// (about 1 ms per combat tick with 40 ships). It is now skipped when both queues are empty. Off:
-/// <c>PERFORMANCE_CONSTRUCTION_FLOOD_SKIP=0</c>.
+/// <c>UNOFFICIAL_PATCH_CONSTRUCTION_FLOOD_SKIP=0</c>.
 /// </summary>
 internal static class ConstructionFloodSkip
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_CONSTRUCTION_FLOOD_SKIP"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_CONSTRUCTION_FLOOD_SKIP"));
     internal static bool IsRequested(string? value) => value != "0";
 
     internal static readonly MethodInfo Target = AccessTools.Method(typeof(ConstructionManager), "RefreshUnderlyingPartRemoves", [typeof(IntRect)])

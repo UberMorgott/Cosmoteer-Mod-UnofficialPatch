@@ -1,6 +1,6 @@
 using System;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Render-view identity (decoupling spec §R1): a slot plus a 32-bit generation. Generation 0 means "none"; a slot's

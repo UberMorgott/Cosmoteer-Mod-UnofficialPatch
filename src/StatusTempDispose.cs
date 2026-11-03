@@ -8,7 +8,7 @@ using Cosmoteer.Ships.Statuses;
 using Halfling.Geometry;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Every sim tick, every status handler with value modulators (fire, damage-over-time and similar statuses on tiles and
@@ -21,11 +21,11 @@ namespace Performance;
 /// collections are only read inside the method (the dictionary through ValueModulationData, which is not kept), so the
 /// statuses, their order, the float math, the value assignments and the notification order are unchanged. Patched for
 /// both instantiations the game uses: StatusHandler&lt;IntVector2&gt; (TileStatusHandler) and StatusHandler&lt;Part&gt;
-/// (PartStatusHandler, shared reference-type code). Off: <c>PERFORMANCE_STATUS_TEMP_DISPOSE=0</c>.
+/// (PartStatusHandler, shared reference-type code). Off: <c>UNOFFICIAL_PATCH_STATUS_TEMP_DISPOSE=0</c>.
 /// </summary>
 internal static class StatusTempDispose
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_STATUS_TEMP_DISPOSE"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_STATUS_TEMP_DISPOSE"));
     internal static bool IsRequested(string? value) => value != "0";
 
     private const string MethodName = "<Halfling.Scene2D.IFixedUpdateableSceneObject.FixedUpdate>g___ModulateStatusValues|65_0";

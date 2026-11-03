@@ -11,11 +11,11 @@ using Halfling;
 using Halfling.Application;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 internal static class CullCadence
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_CULL_CADENCE"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_CULL_CADENCE"));
     internal static bool IsRequested(string? value) => value == "1";
     private static int _ready;
     private static long _ownedUpdateCalls;

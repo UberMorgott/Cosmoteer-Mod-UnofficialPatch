@@ -4,7 +4,7 @@ using System.Reflection;
 using Halfling.Application;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Validates specialization after mod initialization, once per serialized native update.

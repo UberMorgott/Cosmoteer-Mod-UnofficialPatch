@@ -13,7 +13,7 @@ using Halfling.Physics2D.Collision;
 using Halfling.Physics2D.Dynamics;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// A beam's three hit raycasts (operational, structural, secondary: BeamEmitter.GetHitInfo) start on the emitter's own ship,
@@ -35,11 +35,11 @@ namespace Performance;
 /// of these pure calls changes. Census per body is cached on FixtureList version and a ship-fixture category epoch
 /// (UserData is set before a fixture is added). The skip applies only to the armed beam raycast itself (World.RayCast
 /// depth), never to nested queries. Off (native) on foreign Harmony patches, changed game files or with the beam target
-/// memo prototype. Off: <c>PERFORMANCE_BEAM_OWN_SKIP=0</c>.
+/// memo prototype. Off: <c>UNOFFICIAL_PATCH_BEAM_OWN_SKIP=0</c>.
 /// </summary>
 internal static class BeamOwnBodySkip
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_BEAM_OWN_SKIP"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BEAM_OWN_SKIP"));
     internal static bool IsRequested(string? value) => value != "0";
 
     private static MethodInfo M(Type t, string name) => AccessTools.Method(t, name) ?? throw new MissingMethodException(t.Name, name);

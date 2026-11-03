@@ -20,7 +20,7 @@ using Cosmoteer.Source.Ships.Blueprints;
 using Halfling.Scene2D;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Update bucket 1 of every ship (<c>PartsManager.UpdateCallbacks</c>) re-evaluates the blueprint-only rules toggle of
@@ -38,13 +38,13 @@ namespace Performance;
 /// </list>
 /// Executed frames are the original method (same snapshot and order). Off (native) when anything cannot be verified; a
 /// changed game throws from <see cref="Initialize"/> so every patch rolls back. Reflection writes are not covered.
-/// Set PERFORMANCE_BLUEPRINT_TOGGLE_SKIP=0 to keep native updates for A/B comparison.
+/// Set UNOFFICIAL_PATCH_BLUEPRINT_TOGGLE_SKIP=0 to keep native updates for A/B comparison.
 /// </summary>
 internal static class BlueprintToggleUpdates
 {
     internal const int Bucket = 1;
     private const long Unseen = long.MinValue;
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_BLUEPRINT_TOGGLE_SKIP"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BLUEPRINT_TOGGLE_SKIP"));
     internal static bool IsRequested(string? value) => value != "0";
 
     internal static readonly MethodInfo Target = AccessTools.Method(typeof(PartsManager.UpdateCallbacks), "Update");

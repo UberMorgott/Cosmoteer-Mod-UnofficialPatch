@@ -11,7 +11,7 @@ using Cosmoteer.Game;
 using Cosmoteer.Source.Ships.Blueprints;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Vanilla blueprint components that follow a rules toggle (network port, stat provider, network toggle) run an update

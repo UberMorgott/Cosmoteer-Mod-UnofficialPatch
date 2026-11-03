@@ -10,7 +10,7 @@ Resolve path aliases recursively; all refer to this local machine:
 
 | Alias | Absolute path |
 |---|---|
-| P | `E:\DEV\cosmoteer\Performance` |
+| P | `E:\DEV\cosmoteer\UnofficialPatch` |
 | B | `E:\DEV\cosmoteer\Bench\out\stuck-20261030` |
 | A | `B\acceptance` |
 | E | `E:\DEV\cosmoteer\Bench\out\performance-20261030` |
@@ -19,9 +19,9 @@ Resolve path aliases recursively; all refer to this local machine:
 | O | `U\Saved Games` |
 | G | `D:\Steam\steamapps\common\Cosmoteer` |
 
-- Both repositories are on `main`. Performance behavior/diagnostic source: **`4307d7d`, version 0.2.16**; owned clone helper: `c259113`. Bench: **`bc5db78`**. Source includes held changes; do not assume its default patches equal the installed build.
-- **Actually installed: Performance 0.2.1**, DLL SHA256 **`89548CE4AACD52C70383EA4AE742F42E6F5813F64550289424A397FD7E4899E8`**, at `U\Mods\Performance`. No later experiment was promoted, published or pushed.
-- Main settings enable only loader `D:/Steam/steamapps/workshop/content/799600/3577650065` and `Mods/Performance`, as authorized. Other mods were disabled for isolation, not restored. Backup: `U\settings.rules.before-performance-only-20261030-223828.bak`; mod backup: `U\ModBackups\Performance-before-0.2.1-20261030`.
+- Both repositories are on `main`. Unofficial Patch behavior/diagnostic source: **`4307d7d`, version 0.2.16**; owned clone helper: `c259113`. Bench: **`bc5db78`**. Source includes held changes; do not assume its default patches equal the installed build.
+- **Actually installed: Unofficial Patch 0.2.1**, DLL SHA256 **`89548CE4AACD52C70383EA4AE742F42E6F5813F64550289424A397FD7E4899E8`**, at `U\Mods\UnofficialPatch`. No later experiment was promoted, published or pushed.
+- Main settings enable only loader `D:/Steam/steamapps/workshop/content/799600/3577650065` and `Mods/UnofficialPatch`, as authorized. Other mods were disabled for isolation, not restored. Backup: `U\settings.rules.before-performance-only-20261030-223828.bak`; mod backup: `U\ModBackups\Unofficial Patch-before-0.2.1-20261030`.
 - Server-GC marker `U\unofficial-patch-server-gc.txt` is absent; installed runtimeconfig has no explicit `System.GC.Server`. Bench runs explicitly recorded workstation GC unless testing otherwise.
 - At pause: no Cosmoteer/bench process, no active WPR recording. Other applications/sessions were preserved.
 - Hardware: Ryzen 7 9800X3D, 8C/16T, RTX 5070 Ti, approximately 61.55 GiB RAM. Game 0.30.5a, bundled **.NET 10.0.12**; development/probe host **10.0.14**. Distinguish them.
@@ -40,7 +40,7 @@ User clarification: the agent-link requirement was intended for Claude Code. **C
 
 ## 3. Complete experiment-family ledger
 
-Numbers describe their specific fixture, not universal performance. "Native" in later graphics diagnostics often means native backend **with installed Performance 0.2.1**, not an entirely unmodded game. Detailed chronology: `P\docs\bench-2026-10-30.md`, `late-save-investigation-2026-10-30.md`, `performance-acceptance-2026-10-30.md`, `TASKS.md`, `FIXES.md`.
+Numbers describe their specific fixture, not universal performance. "Native" in later graphics diagnostics often means native backend **with installed Unofficial Patch 0.2.1**, not an entirely unmodded game. Detailed chronology: `P\docs\bench-2026-10-30.md`, `late-save-investigation-2026-10-30.md`, `performance-acceptance-2026-10-30.md`, `TASKS.md`, `FIXES.md`.
 
 | Experiment | Result / disposition | Evidence |
 |---|---|---|
@@ -48,7 +48,7 @@ Numbers describe their specific fixture, not universal performance. "Native" in 
 | PlayerMoney/MissionTrade/ForeignJobArrival; telemetry | Source-confirmed parallel mutation hazards; headless checks. Other audited vanilla buckets had no further confirmed race. Live MP still pending. | `P\FIXES.md`, `TASKS.md` and source |
 | InputDelay (`fa119fc`, later removed) | Impaired two-instance LAN: zero stalls both arms, delay11.1→18.4 ticks (~230 ms extra); clean2→2.05. Reordering inflated loss. Rejected; >=3-client/bursty proof absent. | `TASKS.md` LAN entries; precise old raw stand path not recovered |
 | Original optional Server GC | p99-18%, pauses-71%, >33ms frames-74%; worst+33%, short spikes0.9→3/min, RAM higher. Mixed, optional only. | `FIXES.md`; Bench `out\reports\stationary-allocation-20261029-095110.json` |
-| RoofOpacity | 24 Meteor far26.82→26.78 FPS; close single pair57.52→68.71 with unequal CPU. No robust FPS gain. | `E\comparison-summary.json`; baseline was pre-change Performance, not vanilla |
+| RoofOpacity | 24 Meteor far26.82→26.78 FPS; close single pair57.52→68.71 with unequal CPU. No robust FPS gain. | `E\comparison-summary.json`; baseline was pre-change Unofficial Patch, not vanilla |
 | MultiColorMax | Native RGB Max used Min with -infinity seed; actual-component tests fixed it. Vanilla rules inspected do not use RGB Max; no FPS claim. | `E\final-validation.json`, `final-smoke`; `P\docs\bench-2026-10-30.md` |
 | Save-loader fidelity and AutoSlow | Initial null source path skipped Autofleet snapshots. Corrected owned-path fixtures restore one local agent. Faithful stuck/coop retain x8;223 selected x1 via enemy auto-slow. Saved-world sustained below-x1 remains unresolved. | `B\faithful-input-manifest.json`, `original-data-final-check.json`, `faithful-stuck`, `faithful-coop-auto`, `combined-coop223` |
 | ShaderConstantBoxing only | Saves7/9 allocation/frame-85.71%/-29.31%, GC pauses-59.06%/-20.19%; save9 p9924.62→31.37 ms and more >33ms frames. Mechanism confirmed; shader-only no-regression gate failed. | `B\shader-comparison-summary.json`, `shader-late-7-stable-x8`, `shader-late-9-far-x8` |
@@ -138,12 +138,12 @@ Frozen key DLLs (SHA256):
 
 | Folder under B | DLL / SHA256 |
 |---|---|
-| `installed-0.2.1-cpu-profile-mod` | Performance `89548CE4AACD52C70383EA4AE742F42E6F5813F64550289424A397FD7E4899E8` |
-| `beam-identity-candidate-mod` (0.2.12) | Performance `3A69C2FF4D21DA70678292BF6AEB02BF5E4E583B78AE41D6EEB7A636E13E0982` |
-| `atlas-owner-lock-candidate-mod` (0.2.13) | Performance `C528775F99B5B7576C210D36F679B1076136D0988CEF480458A6522FD5EF9E47` |
-| `atlas-write-census-candidate-mod` (0.2.14) | Performance `1B7DCDC5061B95CFE678FE246302479C8288BA76B10DB28DE0B639A09657EA05` |
-| `atlas-latch-candidate-mod` (0.2.15) | Performance `6B0C6B04CAAE8DC48D4CA22DD57A9A7D88D720A80961F9BCB4B102BFEB51659D` |
-| `atlas-field-census-candidate-mod` (0.2.16) | Performance `237EAB7D52C3F50641F0D043B7A26B3E1F5021235FF4626E0211E78D9C21FE2D` |
+| `installed-0.2.1-cpu-profile-mod` | Unofficial Patch `89548CE4AACD52C70383EA4AE742F42E6F5813F64550289424A397FD7E4899E8` |
+| `beam-identity-candidate-mod` (0.2.12) | Unofficial Patch `3A69C2FF4D21DA70678292BF6AEB02BF5E4E583B78AE41D6EEB7A636E13E0982` |
+| `atlas-owner-lock-candidate-mod` (0.2.13) | Unofficial Patch `C528775F99B5B7576C210D36F679B1076136D0988CEF480458A6522FD5EF9E47` |
+| `atlas-write-census-candidate-mod` (0.2.14) | Unofficial Patch `1B7DCDC5061B95CFE678FE246302479C8288BA76B10DB28DE0B639A09657EA05` |
+| `atlas-latch-candidate-mod` (0.2.15) | Unofficial Patch `6B0C6B04CAAE8DC48D4CA22DD57A9A7D88D720A80961F9BCB4B102BFEB51659D` |
+| `atlas-field-census-candidate-mod` (0.2.16) | Unofficial Patch `237EAB7D52C3F50641F0D043B7A26B3E1F5021235FF4626E0211E78D9C21FE2D` |
 | `atlas-field-census-bench-mod` | Bench `9E3E0EF2DD746A8FD22ED9D963FFE05245CE632D444D29C3729DA906357F2EB5` |
 
 Latest clean gates: `T\performance-atlas-field-fullgate-20261031.log`, `performance-atlas-field-release-20261031.log`; `bench-atlas-field-final-fullgate-20261031.log`, `bench-atlas-field-final-release-20261031.log`. Focused logs: `atlas-field-census-{red,green}-20261031.log`, `bench-atlas-field-{red,green}-20261031.log`. Source reviews were independent; no field-census FPS improvement was claimed.

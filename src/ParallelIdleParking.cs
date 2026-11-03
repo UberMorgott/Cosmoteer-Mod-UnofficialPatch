@@ -11,11 +11,11 @@ using Halfling.Application;
 using Halfling.Performance;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 internal static class ParallelIdleParking
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_IDLE_PARK"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_IDLE_PARK"));
     internal static bool IsRequested(string? value) => value != "0";
     private static readonly IdleGate Idle = new(static () => FastParallel.IsRunning, 8, 10);
     private static readonly Type PoolType = AccessTools.Field(typeof(FastParallel), "s_liveTasks").FieldType.GetGenericTypeDefinition();
@@ -80,7 +80,7 @@ internal static class ParallelIdleParking
             _director = director;
             _director.FrameStarting += OnFrameStarting;
             Idle.Enable();
-            Log.Info("Parallel idle parking active: epoch-notified outer worker wait (off: PERFORMANCE_IDLE_PARK=0)");
+            Log.Info("Parallel idle parking active: epoch-notified outer worker wait (off: UNOFFICIAL_PATCH_IDLE_PARK=0)");
             return true;
         }
         catch (Exception ex)

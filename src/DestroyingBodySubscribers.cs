@@ -7,7 +7,7 @@ using Cosmoteer.Ships.Parts.Colliders;
 using Halfling.Scene2D.Physics;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Every collider part subscribes to its ship's ScenePhysicsWrapper.DestroyingBody while it has a collider and
@@ -19,11 +19,11 @@ namespace Performance;
 /// the real event calls the colliders in subscription order on a snapshot. The game's only other subscriber of a ship's
 /// wrapper is ShipPhysics, which subscribes once in its constructor, before any collider can, and never leaves, so the
 /// raise order (ShipPhysics, then colliders in order) and a collider unsubscribing itself during the raise are as before.
-/// Off: <c>PERFORMANCE_DESTROYING_BODY_SUBSCRIBERS=0</c>.
+/// Off: <c>UNOFFICIAL_PATCH_DESTROYING_BODY_SUBSCRIBERS=0</c>.
 /// </summary>
 internal static class DestroyingBodySubscribers
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_DESTROYING_BODY_SUBSCRIBERS"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_DESTROYING_BODY_SUBSCRIBERS"));
     internal static bool IsRequested(string? value) => value != "0";
 
     /// <summary>Method, IL sha256, DestroyingBody add sites, remove sites.</summary>

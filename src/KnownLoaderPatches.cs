@@ -10,7 +10,7 @@ using Cosmoteer.Ships.Parts.Weapons;
 using Halfling.Physics2D.Dynamics;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 internal static class KnownLoaderPatches
 {

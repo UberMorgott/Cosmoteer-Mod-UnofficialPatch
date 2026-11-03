@@ -9,7 +9,7 @@ using System.Text.Json.Nodes;
 using Cosmoteer;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Experimental opt-in: .NET Server GC via System.GC.Server in the game's runtimeconfig.json (read by the host at the

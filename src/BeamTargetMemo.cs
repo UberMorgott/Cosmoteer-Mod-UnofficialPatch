@@ -28,12 +28,12 @@ using Halfling.Physics2D.Collision.Shapes;
 using Halfling.Physics2D.Dynamics;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 internal static class BeamTargetMemo
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_BEAM_TARGET_MEMO"));
-    internal static readonly bool VerificationRequested = Requested && IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_BEAM_TARGET_VERIFY"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BEAM_TARGET_MEMO"));
+    internal static readonly bool VerificationRequested = Requested && IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BEAM_TARGET_VERIFY"));
     internal static bool IsRequested(string? value) => value == "1";
     private static int _ready;
     private static bool _attempted;

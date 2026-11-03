@@ -9,7 +9,7 @@ using Halfling.Pooling;
 using Halfling.Scene2D;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Every scene component that stops, starts or is removed (sounds, media effects, beam effects, continuous part effects,
@@ -26,11 +26,11 @@ namespace Performance;
 /// only adders) is checked too, which covers types emitted at runtime. Any such type, or an assembly that cannot be
 /// inspected, switches the fast path off for the rest of the session.
 /// shortcut: foreign code adding an Equals-overriding runtime-emitted type straight to SceneRoot.Updateables is not seen.
-/// Off: <c>PERFORMANCE_SCENE_BUCKET_REMOVE=0</c>.
+/// Off: <c>UNOFFICIAL_PATCH_SCENE_BUCKET_REMOVE=0</c>.
 /// </summary>
 internal static class SceneBucketRemove
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_SCENE_BUCKET_REMOVE"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_SCENE_BUCKET_REMOVE"));
     internal static bool IsRequested(string? value) => value != "0";
 
     /// <summary>Target method name, IL sha256, BucketList.Remove and BucketList.Add call sites.</summary>

@@ -10,7 +10,7 @@ using Halfling.Network;
 using Halfling.Timing;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// MP freeze telemetry, log only (every peer, main thread): per remote player the margin in ticks with which each InputTick

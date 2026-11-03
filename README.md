@@ -31,7 +31,7 @@ key by hand; Steam "verify files" also resets it. Details: [FIXES.md](FIXES.md).
 ## Build and test
 
 Requires the .NET 10 SDK and a local Cosmoteer install (`GameBin` in
-`Performance.csproj`).
+`UnofficialPatch.csproj`).
 
 ```powershell
 dotnet build

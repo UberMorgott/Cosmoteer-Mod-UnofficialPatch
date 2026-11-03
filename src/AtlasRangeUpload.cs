@@ -15,7 +15,7 @@ using HarmonyLib;
 using SharpDX.Direct3D11;
 using D3DBuffer = SharpDX.Direct3D11.Buffer;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Ship atlas geometry upload proportional to what changed. Native Dynamic arrays upload their whole capacity
@@ -24,12 +24,12 @@ namespace Performance;
 /// are created with <see cref="AtlasRangeArray"/> instead: a DEFAULT buffer that keeps unchanged bytes, updated with
 /// UpdateSubresource for at most <see cref="AtlasDirtySpans.MaxSpans"/> coalesced dirty spans. Removing the last quad
 /// of a list only shrinks the list count (its bytes are not drawn and nothing is copied). Render-only; no sim effect.
-/// Off: <c>PERFORMANCE_ATLAS_RANGE_UPLOAD=0</c>. A changed WDX/HalflingCore contract rolls back every patch; a foreign
+/// Off: <c>UNOFFICIAL_PATCH_ATLAS_RANGE_UPLOAD=0</c>. A changed WDX/HalflingCore contract rolls back every patch; a foreign
 /// Harmony owner on a dependency keeps new lists and removals native (checked every frame with the other features).
 /// </summary>
 internal static class AtlasRangeUpload
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_ATLAS_RANGE_UPLOAD"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_ATLAS_RANGE_UPLOAD"));
     internal static bool IsRequested(string? value) => value != "0";
 
     private static readonly Type QuadType = typeof(AtlasQuadManager).GetNestedType("InternalManagedAtlasQuad", BindingFlags.NonPublic)

@@ -1,4 +1,4 @@
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Entry point called by Yet Another Mod Loader (public static void GameLoadInitializer()). The loader calls it from its

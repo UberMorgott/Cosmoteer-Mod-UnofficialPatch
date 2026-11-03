@@ -1,6 +1,6 @@
 using System;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// CPU-side render tables keyed by (kind, slot): the reader's drawable D for kinds that need no GPU mirror (poses,

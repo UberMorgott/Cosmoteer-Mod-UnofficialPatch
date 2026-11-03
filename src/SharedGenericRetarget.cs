@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Keeps this mod's Harmony patches on shared generic code (a method of <c>Foo&lt;RefType&gt;</c>) installed after the runtime

@@ -7,7 +7,7 @@ using Cosmoteer.Ships.Rendering;
 using Cosmoteer.Simulation;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Every rendered ship tests the cursor before checking the hide-roof key, repeating a spatial search and allocating

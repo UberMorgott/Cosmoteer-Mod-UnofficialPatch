@@ -7,7 +7,7 @@ using Cosmoteer.Simulation.MediaEffects;
 using Halfling.Audio;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// A looping sound shared by many effects (SharedSoundEffect) plays one real sound instance; each effect gets a virtual
@@ -21,11 +21,11 @@ namespace Performance;
 /// subscription, so it sits where the first handler did) that calls a snapshot in subscription order, exactly as the
 /// multicast did (handlers removed during the raise still run). The real instance is private to its SharedSoundEffect,
 /// so nothing else subscribes to it while the effect is alive. Audio is presentation only.
-/// Off: <c>PERFORMANCE_SOUND_STOP_HUB=0</c>.
+/// Off: <c>UNOFFICIAL_PATCH_SOUND_STOP_HUB=0</c>.
 /// </summary>
 internal static class SoundStopHub
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_SOUND_STOP_HUB"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_SOUND_STOP_HUB"));
     internal static bool IsRequested(string? value) => value != "0";
 
     private static readonly FieldInfo ActualInstance = AccessTools.Field(typeof(SharedSoundEffect), "_actualInstance")

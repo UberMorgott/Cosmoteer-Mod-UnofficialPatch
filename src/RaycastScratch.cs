@@ -11,7 +11,7 @@ using Halfling.Physics2D.Dynamics;
 using HarmonyLib;
 using V = Halfling.Geometry.Vector2;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Limits the lifetime of the shared PhysicsExtensions scratch fields. This does not make same-world/same-tree
@@ -20,7 +20,7 @@ namespace Performance;
 /// </summary>
 internal static class RaycastScratch
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_RAYCAST_SCRATCH"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_RAYCAST_SCRATCH"));
     internal static bool IsRequested(string? value) => value == "1";
     private static int _ready;
     private static bool _attempted;

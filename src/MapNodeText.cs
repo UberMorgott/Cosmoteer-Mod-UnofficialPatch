@@ -13,7 +13,7 @@ using Cosmoteer.Modes.Career.Map;
 using Halfling;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Vanilla CareerGameModeManager.GetMapNodeText rebuilds every galaxy-map label each frame (escaped name, tier markup,

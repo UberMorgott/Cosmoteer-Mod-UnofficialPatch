@@ -10,7 +10,7 @@ using Cosmoteer.Ships.Parts.Logic;
 using Halfling.Graphics;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Heat glow colours (<see cref="PartValueColor"/> fed by network-average thermal values) change by tiny amounts every
@@ -19,7 +19,7 @@ namespace Performance;
 /// consumer last read, so all readers keep agreeing and each source channel stays within 1/255 of the exact value
 /// (an approved small visual approximation; blended pixels where glows overlap may differ slightly more).
 /// Only <c>ColorChanged</c> consumers see the effect, all render/effect code (PartGraphics, sprite components,
-/// PartMultiColor, PartContinuousEffects); no sim code reads it. Off: <c>PERFORMANCE_GLOW_QUANTIZE=0</c>.
+/// PartMultiColor, PartContinuousEffects); no sim code reads it. Off: <c>UNOFFICIAL_PATCH_GLOW_QUANTIZE=0</c>.
 /// <para/>
 /// Deciding needs the new colour during the source's <c>ValueChanged</c> event (which can fire inside the sim), while
 /// vanilla only reads it later on draw. So only colours whose every channel provider is an exact
@@ -33,7 +33,7 @@ namespace Performance;
 /// </summary>
 internal static class GlowQuantize
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_GLOW_QUANTIZE"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_GLOW_QUANTIZE"));
     internal static bool IsRequested(string? value) => value != "0";
 
     internal const float Step = 1f / 255f;

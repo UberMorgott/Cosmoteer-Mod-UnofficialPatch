@@ -6,7 +6,7 @@ using Cosmoteer.Simulation.MediaEffects;
 using Halfling.Geometry;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Vanilla ParticleEffect's miniview emission check calls RotRect.IntersectsWith((IShape)node.WorldLocation), boxing a

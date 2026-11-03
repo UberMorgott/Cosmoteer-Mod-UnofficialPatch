@@ -5,7 +5,7 @@ using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Reads the ReadyToRun inlining table of an assembly and answers "which precompiled method bodies contain an inlined

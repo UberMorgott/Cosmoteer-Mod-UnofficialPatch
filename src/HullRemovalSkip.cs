@@ -9,7 +9,7 @@ using Halfling.Geometry;
 using Halfling.Pooling;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Every part removed from a ship (in combat: every destroyed part) throws its convex hull away
@@ -32,11 +32,11 @@ namespace Performance;
 /// A removal is refilled only while every part lies within ±<see cref="SafeCoordinate"/> cells, where none of vanilla's
 /// int cross products can overflow. Only exact <see cref="PartsManager"/> and <see cref="DestroyedPartsManager"/> instances, through their removal entry
 /// points (the only callers of the shared generic RemovePart); blueprints stay vanilla. Shared generic code is not
-/// patched. Off: <c>PERFORMANCE_HULL_REMOVAL_SKIP=0</c>.
+/// patched. Off: <c>UNOFFICIAL_PATCH_HULL_REMOVAL_SKIP=0</c>.
 /// </summary>
 internal static class HullRemovalSkip
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_HULL_REMOVAL_SKIP"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_HULL_REMOVAL_SKIP"));
     internal static bool IsRequested(string? value) => value != "0";
 
     private const string PartsIlSha256 = "ECBC8527BB6BC4E5F54EB2F71076C8E60A7DD135D9DED8C4AED7B5E41137E0C6";

@@ -6,7 +6,7 @@ using System.Runtime.Versioning;
 [assembly: IgnoresAccessChecksTo("Cosmoteer")]
 [assembly: IgnoresAccessChecksTo("HalflingCore")]
 [assembly: IgnoresAccessChecksTo("HalflingPlatformWDX")]
-[assembly: InternalsVisibleTo("Performance.Tests")]
+[assembly: InternalsVisibleTo("UnofficialPatch.Tests")]
 [assembly: SupportedOSPlatform("windows7.0")]
 
 // The runtime matches this attribute by full name, so it must live in this namespace.

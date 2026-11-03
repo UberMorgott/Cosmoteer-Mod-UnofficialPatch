@@ -7,7 +7,7 @@ using Cosmoteer.Ships.Parts.Graphics;
 using Halfling.Geometry;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>RGB Max seeds its reduction with negative infinity but vanilla calls Min; replace that callback's operation.</summary>
 internal static class MultiColorMax

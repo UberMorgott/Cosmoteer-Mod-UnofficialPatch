@@ -11,7 +11,7 @@ using Cosmoteer.Ships.Blueprints;
 using Halfling.Collections;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Every ship split copies the whole part metadata of the old ship into each new piece and then culls what the piece does
@@ -22,7 +22,7 @@ namespace Performance;
 /// Those calls (in CullPartMetadata and in the toggle-state PartStateDictionary.RemoveAll, both followed by <c>pop</c>) go
 /// to <see cref="RemoveAll{T}"/>: the same non-IList path (predicate per item in enumeration order, then Remove per
 /// collected item in that order) with one reused List per item type. IList/array, read-only and null arguments take the
-/// vanilla call, so its own path and exceptions are unchanged. Off: <c>PERFORMANCE_SPLIT_ALLOC=0</c>.
+/// vanilla call, so its own path and exceptions are unchanged. Off: <c>UNOFFICIAL_PATCH_SPLIT_ALLOC=0</c>.
 /// <para/>
 /// Not done: pre-sizing the destination collections of CopyPartMetadataFrom. The two biggest (toggle states and colors)
 /// live inside PartStateDictionary, which BlueprintToggleUpdates' scan forbids touching; the rest would save about
@@ -30,7 +30,7 @@ namespace Performance;
 /// </summary>
 internal static class SplitAlloc
 {
-    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_SPLIT_ALLOC"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_SPLIT_ALLOC"));
     internal static bool IsRequested(string? value) => value != "0";
 
     internal static readonly MethodInfo Cull = AccessTools.Method(typeof(ShipMetadata), nameof(ShipMetadata.CullPartMetadata))

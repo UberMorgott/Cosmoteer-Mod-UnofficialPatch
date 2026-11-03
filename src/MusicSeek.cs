@@ -8,7 +8,7 @@ using Halfling.Serialization.ObjectText;
 using Halfling.Serialization;
 using HarmonyLib;
 
-namespace Performance;
+namespace UnofficialPatch;
 
 /// <summary>
 /// Vanilla music keeps every layer of a track in step: a muted layer advances by setting its stream Position on every
