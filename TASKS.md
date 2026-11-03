@@ -1,5 +1,12 @@
 # Unofficial Patch mod: open tasks
 
+## Workshop 0.2.19 release handoff (2026-11-03)
+Done: plain-language texts (no flag names, no kill-switch mention, no dev jargon) in `docs/workshop/*.txt` (8 langs) + in-game `mod.rules` Description; "Test system" block; 0.2.19 deployed locally (DLL sha256 07F023D6...CAA96 = HEAD 46ae2a8/ca99ffc build). Workshop NOT updated.
+- [ ] Clean rerun after reboot (quiet PC): `bench.exe` on `scenarios\fleet-combat.json` (x1) and the x8 copy (`speed: 8`), variants `base+fh,perf+fh`, `-def 'fh=BENCH_FRAME_HASH=1;BENCH_FRAME_HASH_EVERY=300;BENCH_RENDER_DET=1'` (draft script: scratchpad `ws2\run.ps1`, aborted on user stop).
+- [ ] TODO placeholders to refresh from that rerun: headline numbers (x1 18.4→28.9 FPS, 12.9→17.5 steps/s; x8 7.6→21.2 FPS, slowest 1% 276→133 ms; garbage -65%) in all 8 `docs/workshop/*.txt` + `mod.rules`; Test system line (CPU/RAM/GPU/OS/Cosmoteer 0.30.5 Steam build 26230688/mod version) if anything changed.
+- [ ] Same-tick screenshots (replace `docs/workshop_screens/*`): vanilla and mod captured at the same sim tick (`.frame-<tick>.png` from the frame-hash capture), same camera, x1 and x8; label = tick + game counter's instant FPS for that frame + separately "run average (60 s): …". Crop/resize/label only. Texts already describe shots this way.
+- [ ] Then ONE Workshop update: content + texts + preview + new screenshots, `-dependency 3577650065`, visibility unchanged, `-dry-run` first; confirm the tool replaces (not drops/duplicates) screenshots.
+
 **Paused by the user on 2026-10-31. Do not run further optimization, experiments or automatic continuation until explicitly resumed. Consolidated English handoff: [AI-HANDOFF-2026-10-31.md](docs/AI-HANDOFF-2026-10-31.md). The FPS objective is not achieved; installed mod remains 0.2.1.**
 
 Scope (user, 2026-10-28): this is the single "unofficial patch" mod: every fixable game problem goes here

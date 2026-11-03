@@ -1,9 +1,9 @@
 ID = "morgott.unofficialpatch"
 Name = "Unofficial Patch"
-Version = "0.2.18"
+Version = "0.2.19"
 Author = "Morgott"
 CompatibleGameVersions = ["0.30.5"]
-Description = "Community unofficial patch for vanilla bugs. Fewer garbage-collection stutters: removes per-frame memory allocations from ship parts, muted music layers, particles, thrusters and the galaxy map. Also fixes vanilla multiplayer desyncs (money, station missions, crew on another ship's job), so every player in a multiplayer game must run the same version. If a game update changes the patched code, the mod switches itself off and the game runs vanilla. Requires Yet Another Mod Loader."
+Description = "Community fixes for vanilla Cosmoteer: higher FPS and faster game speed in big battles, fewer stutters, fewer multiplayer desyncs. Ships, parts, balance and visuals stay vanilla.\nWhole mod vs vanilla, 40-ship battle, 60-second average: x1 18.4 -> 28.9 FPS, game speed 12.9 -> 17.5 steps/s; x8 7.6 -> 21.2 FPS, slowest 1% of frames 276 -> 133 ms; memory garbage -65%. Test PC: Ryzen 7 9800X3D, 64 GB, RTX 5070 Ti, Windows 11.\nFixes, biggest gain first: blueprint toggles re-checked only after a change; adaptive game speed at x2-x8 (single player) instead of freezing; heat glows recoloured only per colour step; sprite uploads send only the changed parts; idle helper threads sleep; settled effect values rest; collision timing on all cores; hull outline kept when it cannot change; faster scene list removal; beams skip their own ship; fewer construction refreshes and decal lookups; much less memory garbage, so fewer cleanup stutters.\nBug fixes: multiplayer desyncs (money, station missions, crew on another ship's job); RGB Max colour blend.\nA game update that changes patched code turns the mod off. Safe to remove. Everyone in multiplayer needs the same version. Requires Yet Another Mod Loader."
 Dependencies = ["3577650065"]
 ModifiesGameplay = true
 StringsFolder = "strings"
