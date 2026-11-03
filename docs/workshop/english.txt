@@ -1,64 +1,46 @@
 Unofficial Patch
+[b]Found a bug caused by this mod? Please report it as an issue on GitHub, not in the Steam comments: [url=https://github.com/UberMorgott/Cosmoteer-Mod-UnofficialPatch/issues]github.com/UberMorgott/Cosmoteer-Mod-UnofficialPatch/issues[/url][/b]
+
 [h1]Unofficial Patch[/h1]
-[i]Unofficial patch for vanilla Cosmoteer: higher FPS and faster game speed in big battles, fewer stutters, fewer multiplayer desyncs. Ships, parts, balance and visuals stay vanilla.[/i]
-[b]Requires [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].[/b] In multiplayer everyone needs the same version.
-[b]Whole mod vs vanilla[/b], 40-ship battle, 60-second average: x1 18.4 → 28.9 FPS, game speed 12.9 → 17.5 steps/s; x8 7.6 → 21.2 FPS, slowest 1% of frames 276 → 133 ms; memory garbage -65%.
-Screenshots: vanilla and the mod at the same simulation step of the same battle. Each shows the game's own FPS counter for that one frame and, separately, the 60-second average.
+Unofficial Patch is an attempt to speed up Cosmoteer and cure its ailments. It is made mainly to raise performance in single player and multiplayer. Bugs found along the way are fixed too, hence "unofficial patch". Ships, parts, balance and visuals stay vanilla.
+[b]Requires [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].[/b] In multiplayer everyone needs the same version of the mod.
 
-[h2]Performance, biggest gain first[/h2]
-Before → after, 40-ship battle benchmark, each change measured alone on the test system below: approximate.
+[h2]Performance[/h2]
+Whole mod vs vanilla, 40-ship battle, 60-second average: normal speed 18.4 → 28.9 FPS; at x8 speed 7.6 → 21.2 FPS, worst frames 276 → 133 ms.
+Fixes below, biggest gain first. Each was measured alone in the same battle on the test system below. All numbers are from a preliminary run and are approximate.
 [list]
-[*][b]Blueprint toggles[/b] re-checked on every part every frame; now only after a change. Close view 152 → 552 FPS, far 31.6 → 44.3, far x8 21.2 → 23.9.
-[*][b]Adaptive game speed[/b] (single player, x2-x8): the game crammed up to 8 simulation steps into each frame; now only the steps that fit, so the game runs below the chosen speed instead of freezing. x8: 7.7 → 17.6 FPS, slowest 1% of frames 363 → 148 ms.
-[*][b]Heat glows[/b] recoloured on every tiny change (~19,000 sprites per frame); now only per 1/255 colour step. Moving fleet 60.5 → 127.3 FPS, slowest 1% of frames 36.4 → 21.3 ms.
-[*][b]Sprite uploads:[/b] one changed sprite re-sent a whole ship layer to the graphics card; now only the changed parts. Far 44.8 → 65.0 FPS, far x8 23.3 → 26.7 FPS, game speed 148 → 187 steps/s.
-[*][b]Idle helper threads[/b] spun nonstop waiting for work; now they sleep and wake instantly. Processor time per simulation step -63%, game speed +5.4% (100 ships: -61%, +5.7%).
-[*][b]Settled effect values[/b] (~92%) re-checked every frame; now they rest until changed. Close view 441 → 542 FPS, slowest 1% of frames 15.0 → 6.7 ms.
-[*][b]Collision timing:[/b] every pass re-checked all ~4,900 contacts on one core; now all cores, later passes only the ~300 that changed. Its main-thread time -72%, processor time per simulation step -10%.
-[*][b]Hull outline[/b] rebuilt after any destroyed part; now kept when it cannot change, neighbours read from a grid. Hull processor time -32%.
-[*][b]Scene list removal[/b] compared thousands of objects one by one (~9% of the main thread); now by reference.
-[*][b]Beams[/b] tested hundreds of their own ship's parts they can never hit; skipped. Main-thread time per simulation step -4%.
-[*][b]Construction refresh[/b] ran for every destroyed part with nothing queued; skipped.
-[*][b]Split decals[/b] looked up by name; now a table.
-[/list]
-All simulation changes together at x8: game speed 20.7 → 22.6 steps/s, frame spikes 52 → 30 per minute.
-
-[h2]Less garbage, fewer stutters[/h2]
-The game briefly pauses to clean up discarded memory (garbage); less garbage means fewer of these stutters. Garbage removed:
-[list]
-[*]Part toggles: ~430 MB per 20 s. Galaxy map labels: ~200 MB/20 s. Muted music decoding: ~190 MB/20 s (sound bit-identical). Thrusters: ~140 MB/20 s. Minimap particles: ~60 MB/20 s.
-[*]Nebula checks with no nebula: ~136 MB per 3,000 simulation steps.
-[*]Listener lists rebuilt for every destroyed part, sound or ship split: ~58 + 52 + 26 + 20 MB per 40 s battle.
-[*]Shader values wrapped in temporary objects: garbage per frame -86%, cleanup pauses -59% (late-game save).
-[*]Status effects left temporary lists behind every simulation step: cleanup pause time -4.6%.
-[*]Roof hover search no longer runs while the hide-roof key is up; blueprint ports switch toggles directly.
+[*][b]Blueprint toggles:[/b] every frame, every ship re-checked the toggles of its parts, even when nothing had changed. Now this happens only after a change. Close view 152 → 552 FPS, far view 31.6 → 44.3 FPS, far view at x8 21.2 → 23.9 FPS.
+[*][b]Fast speed in single player (x2-x8):[/b] when the computer could not keep up, the game squeezed up to 8 game steps into each frame and the picture nearly froze. Now each frame runs only as many steps as fit, so the game runs slower than the chosen speed but stays smooth. Multiplayer is not affected. At x8: 7.7 → 17.6 FPS, worst frames 363 → 148 ms.
+[*][b]Heat glows:[/b] heat pipes, heat exchangers and radiators were recoloured on every tiny heat change, about 19,000 sprites per frame. Now a glow is recoloured only when its colour visibly changes (by one colour step). Moving fleet 60.5 → 127.3 FPS, worst frames 36.4 → 21.3 ms.
+[*][b]Ship drawing:[/b] when one sprite of a ship changed, the whole ship layer was sent to the graphics card again (about 7 ms per frame with 40 ships in view). Now only the changed parts are sent. Far view 44.8 → 65.0 FPS, far view at x8 23.3 → 26.7 FPS.
+[*][b]Idle helper threads:[/b] the game's helper threads kept the processor busy while waiting for work. Now they sleep and wake up the moment work arrives, leaving more processor power for the real work. The game runs a few percent faster.
+[*][b]Heat effect values:[/b] radiator and heat exchanger effects were re-checked every frame, although most had already settled. Now settled values rest until something changes. Close view 441 → 542 FPS, worst frames 15.0 → 6.7 ms.
+[*][b]Collisions of fast objects:[/b] after every bullet hit the game re-checked all of about 4,900 contacts on one processor core. Now the checks run on all cores, and repeat checks cover only the roughly 300 contacts that changed. Collision results are identical.
+[*][b]Ship outline:[/b] after any destroyed part the ship's outline was rebuilt from scratch. Now it is kept when the destroyed part cannot change it, and the rebuild itself does less repeated work.
+[*][b]Starting and stopping effects:[/b] when a sound, effect, beam or crew member started or stopped, the game searched a list of thousands of objects the slow way. Now it uses a much faster lookup.
+[*][b]Beams:[/b] every beam tested hundreds of its own ship's parts that it can never hit. These parts are now skipped. Hits and damage are unchanged.
+[*][b]Construction refresh:[/b] every destroyed part triggered a walk through the whole ship to refresh construction work, even with nothing queued. Now skipped when nothing is queued (about 1 ms per game step in a 40-ship battle).
+[*][b]Decals on broken ships:[/b] when a ship broke apart, each decal was looked up by its name, letter by letter. Now a ready table is used (about 0.5 ms per game step in a 40-ship battle).
+[*][b]Fewer short stutters:[/b] the game briefly pauses to clean up memory it no longer needs. Many places that kept creating throwaway data every frame or every step (part toggles, galaxy map labels, muted music layers, thrusters, minimap particles, nebula checks, status effects, ship breakups, sounds, drawing) now reuse it, so these pauses come less often. Music sounds exactly the same.
 [/list]
 
 [h2]Bug fixes[/h2]
 [list]
-[*][b]Multiplayer desyncs:[/b] player money, station delivery missions and crew on another ship's job were changed from two threads at once. Now queued and applied in a fixed order.
-[*][b]RGB Max[/b] colour blend used minimum and gave invalid colours.
-[*]Network summary (freezes, input margin, ping) in the mod log every 10 s.
-[/list]
-
-[h2]Optional, off by default[/h2]
-[list]
-[*][b]Alternative memory cleanup mode:[/b] put an empty file [b]unofficial-patch-server-gc.txt[/b] next to the Saved Ships folder, start the game, restart (delete it to undo). Slowest 1% of frames -18%, but the single worst frame +33% and more RAM.
-[/list]
-In research: simulation on its own thread.
-
-[h2]Safety[/h2]
-[list]
-[*]Simulation changes keep the game's own multiplayer sync check identical (3,000 battle steps, 10 processor and runtime setups, LAN game).
-[*]A game update that changes patched code turns the mod off: vanilla runs.
-[*]Safe to remove: no parts, no save data.
+[*][b]Multiplayer desyncs:[/b] player money, station delivery missions and crew working on another ship's job could be changed from two places at once, so players' games could drift apart. These changes are now applied one by one in a fixed order.
+[*][b]RGB Max colour blend[/b] picked the smallest colour value instead of the largest and produced broken colours. Fixed.
+[*]The mod log writes a short network summary every 10 seconds (freezes, ping per player) to help find the cause of multiplayer lag.
 [/list]
 
 [h2]Test system[/h2]
-AMD Ryzen 7 9800X3D (8 cores / 16 threads), 64 GB DDR5-4800, NVIDIA GeForce RTX 5070 Ti, Windows 11 IoT Enterprise LTSC (10.0.26100), Cosmoteer 0.30.5 (Steam build 26230688), Unofficial Patch 0.2.19. A busy dev PC with other programs running, so all numbers are approximate.
+[list]
+[*]CPU: AMD Ryzen 7 9800X3D, 8 cores / 16 threads, 4.7 GHz base, up to 5.2 GHz boost
+[*]RAM: 64 GB DDR5 (2 × 32 GB ADATA AX5U6000C3032G), running at 4800 MT/s
+[*]GPU: NVIDIA GeForce RTX 5070 Ti, 16 GB VRAM, driver 617.14
+[*]Storage: Fanxiang S880 4 TB, M.2 NVMe PCIe 4.0 x4, rated up to 7300 MB/s read / 6800 MB/s write
+[*]OS: Windows 11 IoT Enterprise LTSC 2024 (24H2), build 26100.8037
+[*]Cosmoteer 0.30.5 (Steam build 26230688), Unofficial Patch 0.2.20
+[/list]
+All measurements and development were done on this PC.
 
-[h2]Install[/h2]
-[olist]
-[*]Subscribe to the loader, close the game, run [b]Installer.bat[/b] in <Steam>\steamapps\workshop\content\799600\3577650065.
-[*]Enable Unofficial Patch in Mods, trust its DLL, restart. Trust it again after every update.
-[/olist]
+[h2]Downloads[/h2]
+Releases on GitHub: [url=https://github.com/UberMorgott/Cosmoteer-Mod-UnofficialPatch/releases]github.com/UberMorgott/Cosmoteer-Mod-UnofficialPatch/releases[/url]
