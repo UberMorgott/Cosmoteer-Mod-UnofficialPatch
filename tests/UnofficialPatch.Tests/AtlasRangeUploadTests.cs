@@ -143,7 +143,7 @@ public sealed class AtlasRangeUploadTests : IDisposable
 
         private void Set(string field, object value) =>
             (typeof(D3D11GraphicsManager).GetField(field, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-             ?? throw new MissingFieldException(field)).SetValue(Gfx, value);
+            ?? throw new MissingFieldException(field)).SetValue(Gfx, value);
 
         internal unsafe byte[] Read(GraphicsArray<AtlasQuad> array, int count)
         {

@@ -88,7 +88,7 @@ internal static class AtlasRangeUpload
                 replaced++;
             }
             else if (ci.opcode == OpCodes.Callvirt && ci.operand is MethodInfo { Name: "RemoveAt" } m &&
-                     (m.DeclaringType == typeof(GraphicsList<AtlasQuad>) || m.DeclaringType == typeof(ListBase<AtlasQuad>)))
+                    (m.DeclaringType == typeof(GraphicsList<AtlasQuad>) || m.DeclaringType == typeof(ListBase<AtlasQuad>)))
             {
                 ci.opcode = OpCodes.Call;
                 ci.operand = RemoveAtMethod;

@@ -65,7 +65,6 @@ internal sealed class ViewWriter
         // Cascade provenance (handles stored +1, 0 = none): parent link, child list, and the cs of the logged ancestor
         // Destroy that doomed this object (0 = none). Only such an object may vanish from the source without its own Destroy.
         public int ParentPlus1;
-        public uint ParentGen;
         public int FirstChildPlus1;
         public int NextSiblingPlus1;
         public int PrevSiblingPlus1;
@@ -199,7 +198,6 @@ internal sealed class ViewWriter
             if (p.Alive && p.Gen == parent.Gen)
             {
                 e.ParentPlus1 = ViewHandle.Make(parentKind, parent.Slot) + 1;
-                e.ParentGen = parent.Gen;
                 e.PrevSiblingPlus1 = 0;
                 e.NextSiblingPlus1 = p.FirstChildPlus1;
                 if (p.FirstChildPlus1 != 0)

@@ -9,7 +9,6 @@ using Cosmoteer.Bullets;
 using Cosmoteer.Game;
 using Cosmoteer.Modes.Creative;
 using Cosmoteer.Ships.Parts;
-using Cosmoteer.Ships.Parts.Defenses;
 using Cosmoteer.Ships.Parts.Weapons;
 using Cosmoteer.Simulation;
 using Halfling;
@@ -141,11 +140,11 @@ internal static class BeamFrozen
         // Single player only: in a party the env flag and the patch check are per client, so peers could disagree.
         else if (!BeamParallel.SinglePlayer(sim)) b.Reason = "multiplayer";
         else if (sim._customFixedUpdateBucketHandlers.ContainsKey(-4)) b.Reason = "custom bucket -4 handler";
-        else if (sim.PhysicsWorld?.GetType() != typeof(World) || sim.PhysicsWorld.ContactManager?.GetType() != typeof(ContactManager) ||
-            sim.PhysicsWorld.ContactManager.BroadPhase?.GetType() != typeof(DynamicTreeBroadPhase<BodyFixtureProxy>)) b.Reason = "physics world type";
+        else if (sim.PhysicsWorld.GetType() != typeof(World) || sim.PhysicsWorld.ContactManager.GetType() != typeof(ContactManager) ||
+            sim.PhysicsWorld.ContactManager.BroadPhase.GetType() != typeof(DynamicTreeBroadPhase<BodyFixtureProxy>)) b.Reason = "physics world type";
         else if (!_allowTestOwner && !Compatible(out string? error)) b.Reason = error ?? "compatibility";
         b.On = b.Reason == null;
-        b.Workers = b.On && sim.Mode?.GetType() == typeof(CreativeSimModeManager) && sim.Game?.GetType() == typeof(GameRoot);
+        b.Workers = b.On && sim.Mode.GetType() == typeof(CreativeSimModeManager) && sim.Game?.GetType() == typeof(GameRoot);
         Bindings.AddOrUpdate(sim, b);
         Log.Info("Beam frozen sim bound: " + (b.On ? "on, " + (b.Workers ? "parallel queries" : "serial queries (mode not audited for workers)") : "native (" + b.Reason + ")"));
         return b;
@@ -495,12 +494,12 @@ internal static class BeamFrozen
         beam._effectSeg = new Segment(in point, in hitInfo.EndPoint);
         if (hitInfo.Operational.Hit.HasObject() || hitInfo.Structural.Part != null)
         {
-            ObjectID objectID = (hitInfo.Operational.Hit.Part?.Ship ?? hitInfo.Structural.Part?.Ship ?? hitInfo.Operational.Hit.Shield?.Ship)?.UniqueID ??
+            ObjectID objectId = (hitInfo.Operational.Hit.Part?.Ship ?? hitInfo.Structural.Part?.Ship ?? hitInfo.Operational.Hit.Shield?.Ship)?.UniqueID ??
                 hitInfo.Operational.Hit.Crew?.UniqueID ?? hitInfo.Operational.Hit.Attenuator!.UniqueID;
-            if (objectID != beam._initHitObjectID || initialHitLength <= 0f)
+            if (objectId != beam._initHitObjectID || initialHitLength <= 0f)
             {
                 beam._initialHitLength = beam._length;
-                beam._initHitObjectID = objectID;
+                beam._initHitObjectID = objectId;
             }
         }
         if (beam._beamEffect != null)

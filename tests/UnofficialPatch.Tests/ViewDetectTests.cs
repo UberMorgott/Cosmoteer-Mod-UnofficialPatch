@@ -108,7 +108,7 @@ public class ViewDetectTests
         ], 0);
         Assert.Single(detector.Guards);
         Assert.Equal(
-        new (string, string)[]
+        new[]
         {
             ("List<string>::get_Count", "shared generic (__Canon body run by other instantiations)"),
             ("missing", "not found"),
@@ -214,7 +214,7 @@ public class ViewDetectTests
         detector.RecordSample(0, "A::x", () => Stack("A::x"));
         detector.RecordSample(0, "B::y", () => Stack("B::y"));
         detector.RecordSample(0, "A::x", () => Stack("A::x"));
-        Assert.Equal(new (string, long)[] { ("A::x", 3L), ("B::y", 1L) }, detector.Callers(0));
+        Assert.Equal(new[] { ("A::x", 3L), ("B::y", 1L) }, detector.Callers(0));
         Assert.Equal(2, stackCalls); // a known caller never builds a stack
         Assert.Equal(new[] { "A::x", "B::y" }, detector.Stacks(0).Select(s => s.Caller));
 
@@ -344,8 +344,8 @@ public class ViewDetectTests
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void InnerThrows() => Environment.SetEnvironmentVariable("UNOFFICIAL_PATCH_VIEW_DETECT_TEST_UNUSED", null);
 
-    public static bool SkipPrefix() => false;
-    public static void ThrowPrefix() => throw new InvalidOperationException("foreign prefix");
+    private static bool SkipPrefix() => false;
+    private static void ThrowPrefix() => throw new InvalidOperationException("foreign prefix");
 
     private static MethodInfo Own(string name) => AccessTools.Method(typeof(ViewDetectTests), name);
     private static HarmonyMethod Hook(Type patch, string name) => new(patch.GetMethod(name));

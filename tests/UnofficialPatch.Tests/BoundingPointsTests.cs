@@ -168,11 +168,14 @@ public sealed class BoundingPointsTests
             BlueprintStub(instance, points);
         }
 
+        // Reverse-patch stubs: Harmony replaces the body with the original's, so the parameters are signature only.
+        // ReSharper disable UnusedParameter.Local
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static void PartStub(CommonBasePartsManager<Part> instance, List<IntVector2> points) => throw new NotImplementedException("stub");
+        private static void PartStub(CommonBasePartsManager<Part> instance, List<IntVector2> points) => throw new NotSupportedException("stub");
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static void BlueprintStub(CommonBasePartsManager<BlueprintPart> instance, List<IntVector2> points) => throw new NotImplementedException("stub");
+        private static void BlueprintStub(CommonBasePartsManager<BlueprintPart> instance, List<IntVector2> points) => throw new NotSupportedException("stub");
+        // ReSharper restore UnusedParameter.Local
 
         private static void Ensure()
         {
@@ -180,9 +183,9 @@ public sealed class BoundingPointsTests
             {
                 if (_ready) return;
                 var harmony = new Harmony(TestId + ".reverse");
-                harmony.CreateReversePatcher(BoundingPoints.Target, new HarmonyMethod(typeof(Reverse), nameof(PartStub))).Patch(HarmonyReversePatchType.Original);
+                harmony.CreateReversePatcher(BoundingPoints.Target, new HarmonyMethod(typeof(Reverse), nameof(PartStub))).Patch();
                 harmony.CreateReversePatcher(AccessTools.Method(typeof(CommonBasePartsManager<BlueprintPart>), "GetBoundingPoints"),
-                    new HarmonyMethod(typeof(Reverse), nameof(BlueprintStub))).Patch(HarmonyReversePatchType.Original);
+                    new HarmonyMethod(typeof(Reverse), nameof(BlueprintStub))).Patch();
                 _ready = true;
             }
         }

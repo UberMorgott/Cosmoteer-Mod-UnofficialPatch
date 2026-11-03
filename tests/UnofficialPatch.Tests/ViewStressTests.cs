@@ -42,6 +42,7 @@ public class ViewStressTests(ITestOutputHelper output)
                 long last = 0;
                 while (true)
                 {
+                    // ReSharper disable once AccessToModifiedClosure -- cross-thread flag, set by the writer, polled here via Volatile.Read.
                     bool finished = Volatile.Read(ref done) != 0;
                     if (ring.TryAcquire())
                     {
@@ -408,8 +409,10 @@ public class ViewStressTests(ITestOutputHelper output)
                 var rrng = new Random(seed + 77);
                 h.Sink.Rng = rrng;
                 h.Reader.MaxEventRetries = int.MaxValue;
+                // ReSharper disable once AccessToModifiedClosure -- cross-thread flag, set by the writer, polled here via Volatile.Read.
                 while (Volatile.Read(ref stop) == 0)
                 {
+                    // ReSharper disable once AccessToModifiedClosure -- cross-thread flag, set by the writer, polled here via Volatile.Read.
                     bool inject = Volatile.Read(ref faults) != 0;
                     h.Reader.InjectFaultAtOp = inject && rrng.Next(20) == 0 ? rrng.Next(6) : -1;
                     h.Sink.ThrowProbability = inject ? 0.02 : 0;

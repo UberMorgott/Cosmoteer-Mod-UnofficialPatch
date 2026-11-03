@@ -9,7 +9,7 @@ Original objective: diagnose zoom/load-dependent FPS and simulation-speed collap
 Resolve path aliases recursively; all refer to this local machine:
 
 | Alias | Absolute path |
-|---|---|
+| --- | --- |
 | P | `E:\DEV\cosmoteer\UnofficialPatch` |
 | B | `E:\DEV\cosmoteer\Bench\out\stuck-20261030` |
 | A | `B\acceptance` |
@@ -43,7 +43,7 @@ User clarification: the agent-link requirement was intended for Claude Code. **C
 Numbers describe their specific fixture, not universal performance. "Native" in later graphics diagnostics often means native backend **with installed Unofficial Patch 0.2.1**, not an entirely unmodded game. Detailed chronology: `P\docs\bench-2026-10-30.md`, `late-save-investigation-2026-10-30.md`, `performance-acceptance-2026-10-30.md`, `TASKS.md`, `FIXES.md`.
 
 | Experiment | Result / disposition | Evidence |
-|---|---|---|
+| --- | --- | --- |
 | Original allocation bundle: toggle delegates, deferred muted-music seeking, thruster dictionary, map labels, particle boxing | Sources included toggle429 MB/20s, music~193 MB/20s, particles~62 MB/20s. Bundled locally; no separate causal A/B for every fix. | `P\TASKS.md`; Bench `out\reports\stationary-allocation-20261029-131653.json` |
 | PlayerMoney/MissionTrade/ForeignJobArrival; telemetry | Source-confirmed parallel mutation hazards; headless checks. Other audited vanilla buckets had no further confirmed race. Live MP still pending. | `P\FIXES.md`, `TASKS.md` and source |
 | InputDelay (`fa119fc`, later removed) | Impaired two-instance LAN: zero stalls both arms, delay11.1→18.4 ticks (~230 ms extra); clean2→2.05. Reordering inflated loss. Rejected; >=3-client/bursty proof absent. | `TASKS.md` LAN entries; precise old raw stand path not recovered |
@@ -71,18 +71,18 @@ Numbers describe their specific fixture, not universal performance. "Native" in 
 | Crew-search reuse census | Idle873,565 calls/25,021 duplicates(2.86%); combat186,683/9,349(5.01%). No errors/overflow. No cache implemented. | `A\crew-search-census-40-idle-far`, `crew-search-census-40-combat-far`; Benchc1add9a |
 | CullCadence0.2.7 (`ddc8852`) | Native low-index revisit1,206 ticks atN1,206/P30. End zero-part backlog249→51(-79.5%); FPS~+3%, p99~+0.7%, damage/load differed and one annotated launch. Cleanup proven, FPS fix unproven. | `A\cull-smoke-one`, `cull-ab-combat-40`, `cull-ab-combat-40-last-native-annotated` |
 | Polygon spans / SinCos cache | Polygon estimated main ceiling~0.18–0.55%; SinCos~1.60–2.03% main, high-hit cache flat/slower, changing angles~2x slower. Rejected offline. | `T\cosmoteer-polygon-span-probe-20261031\results.json`; `cosmoteer-sincos-cache-probe-20261031\sincos-results.json` |
-| Beam target/precondition census |49.68M calls,99.6919% repeats, no observed identity/provider change. Guard definition2:33,784,802 calls,99,962/100,097 paired guards pass;135 unknown. Repetition is not purity or saved CPU. | `A\beam-target-combat-40`; `beam-filter-preconditions-combat-40` |
+| Beam target/precondition census | 49.68M calls,99.6919% repeats, no observed identity/provider change. Guard definition2:33,784,802 calls,99,962/100,097 paired guards pass;135 unknown. Repetition is not purity or saved CPU. | `A\beam-target-combat-40`; `beam-filter-preconditions-combat-40` |
 | RaycastScratch0.2.8 (`59d1932`) | Native proof: stale miss payload/retained callback/cross-world nested corruption. Enabled scratch cleanup works; BOTH live reload arms had0 surviving old GameRoot/SimRoot. Same-world tree traversal reentry unsupported. First save attempt refused native blockers. | `T\cosmoteer-raycast-retention-probe-20261031\proof.json`; `A\raycast-retention-duel-drain` |
-| Beam memo0.2.9/loader0.2.10 |0.2.9 refused required loader patches. Exact loader tuple allowance enabled0.2.10, but39.37M calls all native: SecondaryFilter guard rejected defaults;0 fills/hits/comparisons. | `A\beam-memo-verify-smoke`, `beam-memo-verify-combat-40`; `T\beam-memo-loader-patch-proof-20261031.json` |
-| Creative secondary0.2.11 (`cb33f0f`) |35,323,284 native comparisons/0 mismatches. Normal ABBA FPS-8.8%, ticks/s-15.8%, p99+3.8%, allocation/s+17.3%. Compatibility resolution allocated~6.042 MB/s. Rejected; old load-RNG caveat too. | `A\beam-memo-abba-combat-40`, `beam-allocation-profile`; `T\cosmoteer-beam-allocation-analysis-20261031\comparison.json` |
-| Beam metadata resolution0.2.12 (`c4a6eb8`) |30,781,197 native comparisons/0 mismatch/ready. Normal A/B/B stopped before finalA after seed defect found. No acceleration proof; Career/MP pending. | `A\beam-identity-verify-combat-40`, `beam-identity-abba-combat-40\superseded-experiment.json` |
+| Beam memo0.2.9/loader0.2.10 | 0.2.9 refused required loader patches. Exact loader tuple allowance enabled0.2.10, but39.37M calls all native: SecondaryFilter guard rejected defaults;0 fills/hits/comparisons. | `A\beam-memo-verify-smoke`, `beam-memo-verify-combat-40`; `T\beam-memo-loader-patch-proof-20261031.json` |
+| Creative secondary0.2.11 (`cb33f0f`) | 35,323,284 native comparisons/0 mismatches. Normal ABBA FPS-8.8%, ticks/s-15.8%, p99+3.8%, allocation/s+17.3%. Compatibility resolution allocated~6.042 MB/s. Rejected; old load-RNG caveat too. | `A\beam-memo-abba-combat-40`, `beam-allocation-profile`; `T\cosmoteer-beam-allocation-analysis-20261031\comparison.json` |
+| Beam metadata resolution0.2.12 (`c4a6eb8`) | 30,781,197 native comparisons/0 mismatch/ready. Normal A/B/B stopped before finalA after seed defect found. No acceleration proof; Career/MP pending. | `A\beam-identity-verify-combat-40`, `beam-identity-abba-combat-40\superseded-experiment.json` |
 | Hull rebuild census | First bind refused wrong field. Corrected:14,936 removals,5,700 strict candidates,1,688 matched episodes, ordered hull/circle bits identical. Complete point-domain/pool/alias/cache-exit proof incomplete; no preservation patch. | `A\hull-rebuild-combat-40-binding\run\results\92467810fabfe8c7.json`; `T\cosmoteer-hull-complete-point-domain-proof-20261031.md` |
 | Dedicated owner Lock0.2.13 (`ee159ea`) | STA/QueueingSyncContext/sent-message parity passes. Strict ABBA FPS+1.8%, speed+3.1%, p99-1.9%, p95+0.5%, allocation/s+2.4%; candidate CPU lower. Small/confounded; off. | `A\atlas-owner-lock-abba-40-far\validated-arms.json` |
-| Read-only write census0.2.14 (`934af84`) |17,971,313 writes;0 identical,12,852 unknown;0 identical upload intervals/errors0. Simple duplicate suppression unsupported. | `A\atlas-write-census-idle-40-far\census-summary.json` |
+| Read-only write census0.2.14 (`934af84`) | 17,971,313 writes;0 identical,12,852 unknown;0 identical upload intervals/errors0. Simple duplicate suppression unsupported. | `A\atlas-write-census-idle-40-far\census-summary.json` |
 | Latch-store removal0.2.15 (`74a7133`) | Strict ABBA25.7668→25.685 FPS(-0.32%), speed-0.57%, p99+2.37%, GC pause+2.93%. No gain; stop lock/latch tuning without new evidence. | `A\atlas-latch-abba-40-far\comparison.json`, `validated-arms.json` |
 | Owned clone/live-prefix | Helperc259113:13 order/exception/ABI checks + native JIT preparation only; unintegrated. Prefix short-copy blocked on mapped-resource/context lifetime and reentry proof. | `P\src\AtlasDrawClone.cs`; `T\cosmoteer-atlas-prefix-clone-probe-20261031` |
 | AVX2 non-temporal copy / tint hoist | D3D11 full-copy66 staging readbacks/240 timing windows; no win at1/4/16MiB (native41.58/156.45/617.87 us versus44.33/157.92/618.42). Global tint already uniform. Both paths rejected. | `T\cosmoteer-gpu-copy-screen-20261031\result.json`, `README.md`; shader/source anchors in section2 |
-| Field census0.2.16 (`4307d7d`) + Benchbc5db78 |82 focused mod cases,35 Bench cases, fresh full gates/Releases without advisories/warnings. Actual17.87M different writes:86.98% Color-only. Diagnostic only, original writes retained. | `A\atlas-field-census-idle-40-far\run\results\2dea8ddba8a0a200.json` and `.atlas.json` |
+| Field census0.2.16 (`4307d7d`) + Benchbc5db78 | 82 focused mod cases,35 Bench cases, fresh full gates/Releases without advisories/warnings. Actual17.87M different writes:86.98% Color-only. Diagnostic only, original writes retained. | `A\atlas-field-census-idle-40-far\run\results\2dea8ddba8a0a200.json` and `.atlas.json` |
 
 ## 4. Evidence interpretation and implementation boundaries
 
@@ -104,15 +104,15 @@ Inventory coverage: **179 raw result JSONs** under `E:\DEV\cosmoteer\Bench\out`,
 The archive includes one copy of each available payload, using the archive basename shown below. Binary saves are not embedded in this text. Original files were not edited.
 
 | Archive `saves/` entry | Original / pinned available source | Bytes | SHA256 |
-|---|---|---:|---|
-| `stuck.savedgame` | `O\stuck.savedgame` → `B\input\stuck.savedgame` |2884671|`715E5F85FC605F9633928FF325322DEED66AD8AB9F41D7CAD2B3EF86D1155F9E`|
-| `1.savedgame` | `O\1.savedgame` → `B\input\late-largest.savedgame` |36389794|`08E02543C1260A50C2A2A75A1B5F2433DDFFE5058CA8AE73EB1EC32EF2497BFB`|
-| `7.savedgame` | `O\7.savedgame` → `B\input\late-7.savedgame` |35370441|`CEAA1EFAF6FE4CC0F53E08782393D4E2A3D349BDD93003E606859718C643B244`|
-| `9.savedgame` | `O\9.savedgame` → `B\input\late-9.savedgame` |35727589|`F70D674A138FFFFC5002B065F2F1A2FD4FCB4EF168108D3DA4C1D2A806564EE0`|
-| `223.savedgame` | `O\223.savedgame` → `B\input\large-coop-223.savedgame` |12120467|`7E6746B970B8D8A9C34DDF60377A965A3C7FED71D796846A4EE87FD2BF3C74B6`|
-| `Auto-Save 2026-10-28_20-13-58.savedgame` | `O\Auto Saves\Auto-Save 2026-10-28_20-13-58.savedgame` → `B\input\late-coop-auto.savedgame` |6694023|`FF4070C0D1370A67D833265D2B54132BDD10107E488D413BD76A767F845BAAF4`|
-| `Quick-Save 2026-10-31_05-45-41.savedgame` | generated native arm; `Q\Quick-Save 2026-10-31_05-45-41.savedgame` |342382|`A27E558DFB37ADB7578C75793F4EBF37D2FCE72243C0718F06E56D6D80713786`|
-| `Quick-Save 2026-10-31_05-46-15.savedgame` | generated scratch arm; `Q\Quick-Save 2026-10-31_05-46-15.savedgame` |344761|`7E5A93E27BDDD9B175976E382BF5E529E677D96597775854C30E1C15C93487A6`|
+| --- | --- | ---: | --- |
+| `stuck.savedgame` | `O\stuck.savedgame` → `B\input\stuck.savedgame` | 2884671 | `715E5F85FC605F9633928FF325322DEED66AD8AB9F41D7CAD2B3EF86D1155F9E` |
+| `1.savedgame` | `O\1.savedgame` → `B\input\late-largest.savedgame` | 36389794 | `08E02543C1260A50C2A2A75A1B5F2433DDFFE5058CA8AE73EB1EC32EF2497BFB` |
+| `7.savedgame` | `O\7.savedgame` → `B\input\late-7.savedgame` | 35370441 | `CEAA1EFAF6FE4CC0F53E08782393D4E2A3D349BDD93003E606859718C643B244` |
+| `9.savedgame` | `O\9.savedgame` → `B\input\late-9.savedgame` | 35727589 | `F70D674A138FFFFC5002B065F2F1A2FD4FCB4EF168108D3DA4C1D2A806564EE0` |
+| `223.savedgame` | `O\223.savedgame` → `B\input\large-coop-223.savedgame` | 12120467 | `7E6746B970B8D8A9C34DDF60377A965A3C7FED71D796846A4EE87FD2BF3C74B6` |
+| `Auto-Save 2026-10-28_20-13-58.savedgame` | `O\Auto Saves\Auto-Save 2026-10-28_20-13-58.savedgame` → `B\input\late-coop-auto.savedgame` | 6694023 | `FF4070C0D1370A67D833265D2B54132BDD10107E488D413BD76A767F845BAAF4` |
+| `Quick-Save 2026-10-31_05-45-41.savedgame` | generated native arm; `Q\Quick-Save 2026-10-31_05-45-41.savedgame` | 342382 | `A27E558DFB37ADB7578C75793F4EBF37D2FCE72243C0718F06E56D6D80713786` |
+| `Quick-Save 2026-10-31_05-46-15.savedgame` | generated scratch arm; `Q\Quick-Save 2026-10-31_05-46-15.savedgame` | 344761 | `7E5A93E27BDDD9B175976E382BF5E529E677D96597775854C30E1C15C93487A6` |
 
 `Q = A\raycast-retention-duel-drain\run\roots\mods-perf\save\Saved Games\Quick Saves`.
 
@@ -137,7 +137,7 @@ Additional duplicate-copy locations: `B\faithful-stuck\input.savedgame`, `B\fait
 Frozen key DLLs (SHA256):
 
 | Folder under B | DLL / SHA256 |
-|---|---|
+| --- | --- |
 | `installed-0.2.1-cpu-profile-mod` | Unofficial Patch `89548CE4AACD52C70383EA4AE742F42E6F5813F64550289424A397FD7E4899E8` |
 | `beam-identity-candidate-mod` (0.2.12) | Unofficial Patch `3A69C2FF4D21DA70678292BF6AEB02BF5E4E583B78AE41D6EEB7A636E13E0982` |
 | `atlas-owner-lock-candidate-mod` (0.2.13) | Unofficial Patch `C528775F99B5B7576C210D36F679B1076136D0988CEF480458A6522FD5EF9E47` |

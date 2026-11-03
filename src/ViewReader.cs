@@ -70,6 +70,7 @@ internal sealed class ViewReader
     }
 
     public ViewTable Drawable { get; }
+    // ReSharper disable UnusedAutoPropertyAccessor.Global -- getters read by the protocol tests (other project).
     public long CommittedSeq { get; private set; }
     public long AckedSeq { get; private set; }
     public long DispatchedCs => _dispatchedCs;
@@ -79,6 +80,7 @@ internal sealed class ViewReader
     /// <summary>Events that failed uncertainly or exhausted their retries (protocol errors; gate fails on any).</summary>
     public int TerminalEventFailures { get; private set; }
     public long LastTerminalCs { get; private set; }
+    // ReSharper restore UnusedAutoPropertyAccessor.Global
 
     /// <summary>Total dispatch attempts per command for <see cref="ViewEventRetryableException"/> failures.</summary>
     public int MaxEventRetries { get; set; } = 3;

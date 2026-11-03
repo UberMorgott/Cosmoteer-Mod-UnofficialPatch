@@ -16,7 +16,6 @@ using Cosmoteer.Modes.Creative;
 using Cosmoteer.Ships;
 using Cosmoteer.Ships.Parts;
 using Cosmoteer.Ships.Parts.Defenses;
-using Cosmoteer.Ships.Parts.Effects;
 using Cosmoteer.Ships.Parts.Logic;
 using Cosmoteer.Ships.Parts.Weapons;
 using Cosmoteer.Simulation;
@@ -77,7 +76,7 @@ public sealed class BeamFrozenTests
         // Other owner, other hook method or type, other kind, other target: not exempt.
         Assert.False(BeamFrozen.BenchPhaseTiming(Reg(ParallelFor, "someone.else", KnownLoaderPatches.Kind.Prefix, timing, "ForPrefix")));
         Assert.False(BeamFrozen.BenchPhaseTiming(Reg(ParallelFor, bench, KnownLoaderPatches.Kind.Prefix, timing, "WaitPrefix")));
-        Assert.False(BeamFrozen.BenchPhaseTiming(Reg(ParallelFor, bench, KnownLoaderPatches.Kind.Prefix, typeof(ForeignTiming), "ForPrefix")));
+        Assert.False(BeamFrozen.BenchPhaseTiming(Reg(ParallelFor, bench, KnownLoaderPatches.Kind.Prefix, typeof(ForeignTiming), nameof(ForeignTiming.ForPrefix))));
         Assert.False(BeamFrozen.BenchPhaseTiming(Reg(ParallelFor, bench, KnownLoaderPatches.Kind.Postfix, timing, "ForPrefix")));
         Assert.False(BeamFrozen.BenchPhaseTiming(Reg(ParallelFor, bench, KnownLoaderPatches.Kind.Transpiler, timing, "ForPrefix")));
         Assert.False(BeamFrozen.BenchPhaseTiming(Reg(BeamParallel.BucketTarget, bench, KnownLoaderPatches.Kind.Prefix, timing, "ForPrefix")));
@@ -101,7 +100,7 @@ public sealed class BeamFrozenTests
                 finalizer: new HarmonyMethod(typeof(Bench.FramePhaseTiming), "WaitFinalizer"));
             Assert.Equal(4, HarmonyPatchIdentity.ReadRuntimeView().Registrations.Count(r => r.Owner == bench.Id));
             Assert.Null(Scan());
-            foreign.Patch(ParallelFor, postfix: new HarmonyMethod(typeof(ForeignTiming), "ForPrefix"));
+            foreign.Patch(ParallelFor, postfix: new HarmonyMethod(typeof(ForeignTiming), nameof(ForeignTiming.ForPrefix)));
             Assert.Contains("UnofficialPatch.Tests.ForeignDispatcher", Scan());
             foreign.UnpatchAll(foreign.Id);
             Assert.Null(Scan());
@@ -206,6 +205,7 @@ public sealed class BeamFrozenTests
         using var w = new FrozenWorld();
         BeamEmitter first = w.Managers[0]._emittingBeams[0], second = w.Managers[0]._emittingBeams[1], third = w.Managers[0]._emittingBeams[2];
         BeamEmitter added = w.SpareBeam;
+        List<BeamEmitter> emitting = w.Managers[0]._emittingBeams;
         float rangeBefore = second.Rules.Range.BaseValue;
         int fires = 0;
         Subscribe(first, (_, _) =>
@@ -213,7 +213,7 @@ public sealed class BeamFrozenTests
             if (fires++ > 0) return;
             second.Rules.Range.BaseValue = 1f; // would shorten a re-queried beam to 1
             third._emissionTimeRemaining = null; Set(third, "<IsToggleOn>k__BackingField", false); // stopped by an earlier application
-            w.Managers[0]._emittingBeams.Add(added);
+            emitting.Add(added);
         });
         long cancelled = BeamFrozen.Stats.Cancelled;
         string log = w.RunTick(BeamFrozen.QueryMode.Workers, 2, 1);
@@ -238,10 +238,12 @@ public sealed class BeamFrozenTests
         Set(proxy, "_proxy", handler);
         Subscribe(source, AccessTools.Method(typeof(BeamEmitterProxy), "OnEmitterValueChanged").CreateDelegate<EventHandler<EventArgs>>(proxy));
         int forwarded = 0;
+        StringBuilder events = w.Log;
+        Ship newOwner = w.Sources[1];
         Set(proxy, "ValueChanged", new EventHandler<EventArgs>((_, _) =>
         {
-            w.Log.Append("proxy\n");
-            if (forwarded++ == 0) Set(split.Part!, "p_ship", w.Sources[1]); // ship split: the part now belongs to another ship
+            events.Append("proxy\n");
+            if (forwarded++ == 0) Set(split.Part!, "p_ship", newOwner); // ship split: the part now belongs to another ship
         }));
         long cancelled = BeamFrozen.Stats.Cancelled;
         string log = w.RunTick(BeamFrozen.QueryMode.Workers, 8, 4);
@@ -348,7 +350,7 @@ public sealed class BeamFrozenTests
             V worldPoint, Direction worldRot, V hitNormal, int structuralHitNumber)
         {
             FrozenWorld w = Active!;
-            w.Log.Append(CultureInfo.InvariantCulture, $"hit {w.Name(__instance)} {w.Name(hitPart)} {w.Name(hitShield)} {w.Name(hitCrew)} {w.Name(hitRules)} {Bits(worldPoint)} {Bits((float)worldRot)} {Bits(hitNormal)} #{structuralHitNumber}\n");
+            w.Log.Append(CultureInfo.InvariantCulture, $"hit {w.Name(__instance)} {w.Name(hitPart)} {w.Name(hitShield)} {w.Name(hitCrew)} {w.Name(hitRules)} {Bits(worldPoint)} {Bits(worldRot)} {Bits(hitNormal)} #{structuralHitNumber}\n");
             return false;
         }
         public static bool UpdateMediaNodes() => false;
@@ -383,7 +385,7 @@ public sealed class BeamFrozenTests
         internal readonly List<WeaponManager> Managers = [];
         internal readonly Dictionary<WeaponManager, List<BeamEmitter>> Initial = new(ReferenceEqualityComparer.Instance);
         internal readonly Dictionary<BeamEmitter, string> Kinds = new(ReferenceEqualityComparer.Instance);
-        internal IFixedUpdateableSceneObject[] Members = [];
+        internal IFixedUpdateableSceneObject[] Members;
         internal readonly BeamFrozen.Binding Binding = new() { On = true, Workers = true };
         internal readonly StringBuilder Log = new();
         internal readonly Dictionary<BulletVolumeHit, int> Pools = new(ReferenceEqualityComparer.Instance);
@@ -392,8 +394,8 @@ public sealed class BeamFrozenTests
         internal ArcShield ColdShield = null!;
         internal Bullet SharedBullet = null!;
         internal Part DoomedPart = null!;
-        internal BeamEmitter Stopping = null!;
-        internal BeamEmitter SpareBeam = null!;
+        internal BeamEmitter Stopping;
+        internal BeamEmitter SpareBeam;
         private readonly BeamEmitterRules.BeamHitRules[] _hitRules = new BeamEmitterRules.BeamHitRules[6];
 
         internal FrozenWorld()
@@ -406,7 +408,7 @@ public sealed class BeamFrozenTests
             var p1 = Shell<PlayerState>(); Set(p1, "<Team>k__BackingField", 1);
             Set(Game, "_playerStates", new SortedDictionary<int, PlayerState> { [0] = p0, [1] = p1 });
             Set(Sim, "<PhysicsWorld>k__BackingField", World);
-            var updater = Shell<FixedUpdater>(); updater.Interval = (Time)(1f / 30f);
+            var updater = Shell<FixedUpdater>(); updater.Interval = 1f / 30f;
             Set(Sim, "<FixedUpdater>k__BackingField", updater);
             string[] kinds = ["operational", "structural", "shield", "crew", "attenuator", "nothing"];
             for (int i = 0; i < 6; i++) { _hitRules[i] = Shell<BeamEmitterRules.BeamHitRules>(); _names[_hitRules[i]] = kinds[i]; }
@@ -498,7 +500,7 @@ public sealed class BeamFrozenTests
             sb.Append(CultureInfo.InvariantCulture, $"rec {r.Order} {Name(r.Emitter)} {r.Kind}");
             if (r.Kind != BeamFrozen.Kind.Emit) return sb.ToString();
             HitInfo h = r.Info;
-            sb.Append(CultureInfo.InvariantCulture, $" spawn {Bits(r.Spawn)} dir {Bits((float)r.Dir)} end {Bits(r.EndPoint)} | len {Bits(h.Length)} end {Bits(h.EndPoint)} op {Bits(h.Operational.WorldPoint)} {Bits(h.Operational.WorldNormal)} {Hit(h.Operational.Hit)}");
+            sb.Append(CultureInfo.InvariantCulture, $" spawn {Bits(r.Spawn)} dir {Bits(r.Dir)} end {Bits(r.EndPoint)} | len {Bits(h.Length)} end {Bits(h.EndPoint)} op {Bits(h.Operational.WorldPoint)} {Bits(h.Operational.WorldNormal)} {Hit(h.Operational.Hit)}");
             sb.Append(CultureInfo.InvariantCulture, $" st {Name(h.Structural.Part)} {Bits(h.Structural.WorldPoint)} {Bits(h.Structural.WorldNormal)}");
             if (h.AllStructuralHits != null) foreach (var s in h.AllStructuralHits) sb.Append(CultureInfo.InvariantCulture, $" [{Name(s.Part)} {Bits(s.WorldPoint)} {Bits(s.WorldNormal)}]");
             if (r.Attenuator != null) sb.Append(CultureInfo.InvariantCulture, $" att {Name(r.Attenuator)} {Bits(r.AttenuationSegment.Point1)} {Bits(r.AttenuationSegment.Point2)} {r.AttenuationLimit}");

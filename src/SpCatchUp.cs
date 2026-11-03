@@ -91,7 +91,7 @@ internal static class SpCatchUp
 
     /// <summary>Debt is dropped (vanilla value used) on a new SPManager, a speed change, pause or a debug pacing mode.</summary>
     internal static bool MustReset(bool sameOwner, float scale, float lastScale, bool debugPacing) =>
-        !sameOwner || scale != lastScale || debugPacing || !(scale > 0f);
+        !sameOwner || !scale.Equals(lastScale) || debugPacing || !(scale > 0f);
 
     /// <summary>
     /// Adds what vanilla dropped this frame to the debt (bounded), then hands out debt up to the per-frame cap.
