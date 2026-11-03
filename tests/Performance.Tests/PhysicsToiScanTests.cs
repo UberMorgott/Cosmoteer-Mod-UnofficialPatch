@@ -37,14 +37,52 @@ public sealed class PhysicsToiScanTests
         {
             harmony.Patch(PhysicsToiScan.Target, transpiler: new HarmonyMethod(typeof(PhysicsToiScan), nameof(PhysicsToiScan.Transpiler)));
             harmony.Patch(AccessTools.Method(typeof(Island), nameof(Island.SolveTOI)), prefix: new HarmonyMethod(typeof(PhysicsToiScanTests), nameof(CountToi)));
-            Assert.Equal(vanilla, Simulate());
+            Assert.Equal(vanilla, SimulateVerified());
             Assert.True(_toiEvents > 20, $"only {_toiEvents} TOI events");
+            PhysicsToiScan.Incremental = false;
+            Assert.Equal(vanilla, Simulate());
         }
         finally
         {
+            PhysicsToiScan.Incremental = true;
             harmony.UnpatchAll(TestId);
         }
     }
+
+    /// <summary>Incremental classification with the full-classification check on; any stale contact fails the test.</summary>
+    private static string SimulateVerified(bool nested = false, bool remote = false)
+    {
+        long before = PhysicsToiScan.VerifyMismatches;
+        PhysicsToiScan.Verify = true;
+        try { return Simulate(nested, remote); }
+        finally
+        {
+            PhysicsToiScan.Verify = false;
+            Assert.Equal(before, PhysicsToiScan.VerifyMismatches);
+        }
+    }
+
+    /// <summary>OnCollision callbacks inside the TOI loop change bodies that are not part of the contact.</summary>
+    [Fact]
+    public void RemoteBodyChangesFromCallbacksMatchVanilla()
+    {
+        var harmony = new Harmony(TestId + ".remote");
+        try
+        {
+            harmony.Patch(PhysicsToiScan.Target, prefix: new HarmonyMethod(typeof(PhysicsToiScanTests), nameof(EnterToi)), finalizer: new HarmonyMethod(typeof(PhysicsToiScanTests), nameof(LeaveToi)));
+            _remoteChanges = 0;
+            string vanilla = Simulate(remote: true);
+            Assert.True(_remoteChanges > 10, $"only {_remoteChanges} remote changes from TOI callbacks");
+            harmony.Patch(PhysicsToiScan.Target, transpiler: new HarmonyMethod(typeof(PhysicsToiScan), nameof(PhysicsToiScan.Transpiler)));
+            Assert.Equal(vanilla, SimulateVerified(remote: true));
+        }
+        finally
+        {
+            harmony.UnpatchAll(TestId + ".remote");
+        }
+    }
+
+    private static int _remoteChanges;
 
     [Fact]
     public void ParallelClassificationMatchesVanilla()
@@ -86,7 +124,7 @@ public sealed class PhysicsToiScanTests
             string vanilla = Simulate(nested: true);
             Assert.True(_nestedSteps > 3, $"only {_nestedSteps} nested steps from TOI callbacks");
             harmony.Patch(PhysicsToiScan.Target, transpiler: new HarmonyMethod(typeof(PhysicsToiScan), nameof(PhysicsToiScan.Transpiler)));
-            Assert.Equal(vanilla, Simulate(nested: true));
+            Assert.Equal(vanilla, SimulateVerified(nested: true));
         }
         finally
         {
@@ -126,7 +164,7 @@ public sealed class PhysicsToiScanTests
     }
 
     /// <summary>Full bit snapshot of every body after every step (SHA-256 of the raw floats) plus callback count.</summary>
-    private static string Simulate(bool nested = false)
+    private static string Simulate(bool nested = false, bool remote = false)
     {
         World world = Populate(11, out List<Body> bodies);
         World inner = Populate(12, out List<Body> innerBodies);
@@ -140,6 +178,27 @@ public sealed class PhysicsToiScanTests
                 inner.Step(1f / 30f);
                 contact.Enabled = false;
             };
+        }
+        if (remote)
+        {
+            int hits = 0;
+            foreach (Body b in bodies)
+            {
+                b.OnCollision += (_, _, _) =>
+                {
+                    if (_toiDepth != 1) return true;
+                    _remoteChanges++;
+                    Body far = bodies[hits++ * 7 % bodies.Count];
+                    switch (hits % 4)
+                    {
+                        case 0: far.LinearVelocity *= -3f; break;
+                        case 1: far.IsBullet = !far.IsBullet; break;
+                        case 2: far.Awake = !far.Awake; break;
+                        default: far.AngularVelocity += 5f; far.CCDThresholdVelocity = far.CCDThresholdVelocity > 0 ? 0f : 1f; break;
+                    }
+                    return true;
+                };
+            }
         }
         using var sha = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
         byte[] buf = new byte[4];

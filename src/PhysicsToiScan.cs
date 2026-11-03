@@ -30,10 +30,22 @@ namespace Performance;
 /// chosen contact, every side effect and their order are identical. The contact list is mirrored in an array that is
 /// extended with the contacts FindNewContacts inserts at the list head (the world is locked: nothing is destroyed).
 /// Off: <c>PERFORMANCE_TOI_SCAN=0</c>.
+/// <para/>
+/// Incremental (off: <c>PERFORMANCE_TOI_INCREMENTAL=0</c>): after the first pass only contacts whose result can have
+/// changed are classified again: those of bodies the pass advanced, restored or solved (every contact field the pass
+/// writes belongs to their edges), of bodies whose classification inputs changed bit-for-bit (any callback), and new
+/// ones. "Evaluate" contacts become "cached" with the time the pass computed. Callback audit (contact.Update during TOI):
+/// Cosmoteer assigns no ContactManager Begin/End/Pre/PostSolve and no OnSeparation; OnCollision (bullet hits, arc
+/// shields) can change bodies (caught by the snapshot) but never Contact.Enabled/TOIFlag, Fixture.IsSensor/Body or
+/// shapes, and BodyType throws while the world is locked. Diag <c>PERFORMANCE_TOI_VERIFY=1</c> compares every pass
+/// against a full classification, uses the full result and counts mismatches in the stats log.
 /// </summary>
 internal static class PhysicsToiScan
 {
     internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_TOI_SCAN"));
+    internal static bool Incremental = IsRequested(Environment.GetEnvironmentVariable("PERFORMANCE_TOI_INCREMENTAL")); // tests flip it
+    internal static bool Verify = Environment.GetEnvironmentVariable("PERFORMANCE_TOI_VERIFY") == "1"; // tests set it
+    internal static long VerifyMismatches;
     internal static bool IsRequested(string value) => value != "0";
 
     private const string IlSha256 = "7AD052D6628700C617206C5DF5810C4D69DF6FF0EDC8CD09E3E0FBEE674F18DB";
@@ -71,7 +83,40 @@ internal static class PhysicsToiScan
         internal Contact[] Reversed = new Contact[256]; // list order = Reversed[Count-1] .. Reversed[0]
         internal byte[] Kind = new byte[256];
         internal float[] Toi = new float[256]; // _toi of Cached contacts, read during classification
-        internal int Count;
+        internal int[] BodyA = new int[256], BodyB = new int[256]; // body slots of each contact
+        internal int[] Work = new int[256]; // contact indices to classify this pass
+        internal int Count, Classified, WorkCount; // Classified: contacts [0, Classified) hold a current result
+        internal int MaxSubSteps;
+        // Body slots; slot 0 = no body (always dirty, so such a contact is classified every pass as vanilla does).
+        internal Body[] Bodies = new Body[64];
+        internal BodyInputs[] Inputs = new BodyInputs[64];
+        internal bool[] Dirty = new bool[64];
+        internal int BodyCount;
+        internal readonly Dictionary<Body, int> Slot = new(ReferenceEqualityComparer.Instance);
+    }
+
+    /// <summary>Every body field <see cref="Classify"/> reads, compared bit-for-bit (11 x 4 bytes, no padding).</summary>
+    internal struct BodyInputs
+    {
+        internal Vector2 V, P, C;
+        internal float W, Qr, Qi, Ccd;
+        internal int Flags;
+
+        internal static BodyInputs Of(Body b) => new()
+        {
+            V = b._linearVelocity,
+            P = b._xf.p,
+            C = b._sweep.C,
+            W = b._angularVelocity,
+            Qr = b._xf.q.Real,
+            Qi = b._xf.q.Imaginary,
+            Ccd = b.CCDThresholdVelocity,
+            Flags = (b.Awake ? 1 : 0) | (b.IsBullet ? 2 : 0) | (b.IgnoreCCD ? 4 : 0) | ((int)b.BodyType << 3),
+        };
+
+        internal static bool Same(ref BodyInputs a, ref BodyInputs b) =>
+            System.Runtime.InteropServices.MemoryMarshal.AsBytes(new ReadOnlySpan<BodyInputs>(ref a))
+                .SequenceEqual(System.Runtime.InteropServices.MemoryMarshal.AsBytes(new ReadOnlySpan<BodyInputs>(ref b)));
     }
 
     private static readonly Stack<Scratch> Pool = new();
@@ -82,8 +127,10 @@ internal static class PhysicsToiScan
         Contact[] contacts = scratch.Reversed;
         byte[] kind = scratch.Kind;
         float[] toi = scratch.Toi;
-        for (int i = from; i < to; i++)
+        int[] work = scratch.Work;
+        for (int w = from; w < to; w++)
         {
+            int i = work[w];
             Contact c = contacts[i];
             byte k = Classify(c);
             kind[i] = k;
@@ -130,20 +177,110 @@ internal static class PhysicsToiScan
         int added = total - s.Count;
         if (rebuild || added < 0 || (s.Count > 0 && !ReferenceEquals(Nth(manager, added), s.Reversed[s.Count - 1])))
         {
-            s.Count = 0;
+            Array.Clear(s.Reversed, 0, s.Count);
+            s.Count = s.Classified = 0;
+            ClearBodies(s);
             added = total;
         }
         if (added == 0) return;
         if (s.Reversed.Length < total)
         {
-            Array.Resize(ref s.Reversed, Math.Max(total, s.Reversed.Length * 2));
-            s.Kind = new byte[s.Reversed.Length];
-            s.Toi = new float[s.Reversed.Length];
+            int size = Math.Max(total, s.Reversed.Length * 2);
+            Array.Resize(ref s.Reversed, size);
+            Array.Resize(ref s.Kind, size); // results of the old contacts stay valid
+            Array.Resize(ref s.Toi, size);
+            Array.Resize(ref s.BodyA, size);
+            Array.Resize(ref s.BodyB, size);
+            s.Work = new int[size];
         }
         // The list starts with the newest contacts: fill the new tail so that list order is preserved when read backwards.
         Contact c = manager.ContactList.Next;
-        for (int i = s.Count + added - 1; i >= s.Count; i--, c = c.Next) s.Reversed[i] = c;
+        for (int i = s.Count + added - 1; i >= s.Count; i--, c = c.Next)
+        {
+            s.Reversed[i] = c;
+            s.BodyA[i] = SlotOf(s, c.FixtureA.Body);
+            s.BodyB[i] = SlotOf(s, c.FixtureB.Body);
+        }
         s.Count += added;
+    }
+
+    private static void ClearBodies(Scratch s)
+    {
+        Array.Clear(s.Bodies, 0, s.BodyCount);
+        s.Slot.Clear();
+        s.BodyCount = 1;
+        s.Dirty[0] = true;
+    }
+
+    private static int SlotOf(Scratch s, Body body)
+    {
+        if (body == null) return 0;
+        if (s.Slot.TryGetValue(body, out int slot)) return slot;
+        if (s.BodyCount == s.Bodies.Length)
+        {
+            Array.Resize(ref s.Bodies, s.BodyCount * 2);
+            Array.Resize(ref s.Inputs, s.BodyCount * 2);
+            Array.Resize(ref s.Dirty, s.BodyCount * 2);
+        }
+        slot = s.BodyCount++;
+        s.Bodies[slot] = body;
+        s.Inputs[slot] = BodyInputs.Of(body);
+        s.Dirty[slot] = false; // its contacts are new, so they are classified anyway
+        s.Slot.Add(body, slot);
+        return slot;
+    }
+
+    /// <summary>Marks a body whose contacts the pass touched (fields on its edges) for reclassification.</summary>
+    private static void MarkDirty(Scratch s, Body body)
+    {
+        if (body != null && s.Slot.TryGetValue(body, out int slot)) s.Dirty[slot] = true;
+    }
+
+    /// <summary>Picks the contacts to classify this pass: all, or those of dirty/changed bodies plus new ones.</summary>
+    private static void Prepare(Scratch s)
+    {
+        int[] work = s.Work;
+        int n = 0;
+        if (!Incremental || s.Classified == 0 || s.MaxSubSteps != Settings.MaxSubSteps)
+        {
+            for (int i = 0; i < s.Count; i++) work[i] = i;
+            n = s.Count;
+        }
+        else
+        {
+            bool[] dirty = s.Dirty;
+            for (int b = 1; b < s.BodyCount; b++)
+            {
+                BodyInputs now = BodyInputs.Of(s.Bodies[b]);
+                if (!BodyInputs.Same(ref now, ref s.Inputs[b]))
+                {
+                    s.Inputs[b] = now;
+                    dirty[b] = true;
+                }
+            }
+            int[] a = s.BodyA, bb = s.BodyB;
+            for (int i = 0; i < s.Classified; i++)
+                if (dirty[a[i]] || dirty[bb[i]]) work[n++] = i;
+            for (int i = s.Classified; i < s.Count; i++) work[n++] = i;
+            Array.Clear(dirty, 1, s.BodyCount - 1);
+        }
+        s.WorkCount = n;
+        s.Classified = s.Count;
+        s.MaxSubSteps = Settings.MaxSubSteps;
+    }
+
+    /// <summary>Diag: every contact against a fresh classification; mismatches take the fresh result.</summary>
+    private static void VerifyAll(Scratch s)
+    {
+        for (int i = 0; i < s.Count; i++)
+        {
+            Contact c = s.Reversed[i];
+            byte k = Classify(c);
+            if (k == s.Kind[i] && (k != Cached || BitConverter.SingleToInt32Bits(c._toi) == BitConverter.SingleToInt32Bits(s.Toi[i]))) continue;
+            VerifyMismatches++;
+            s.Kind[i] = k;
+            if (k == Cached) s.Toi[i] = c._toi;
+        }
     }
 
     /// <summary>The n-th contact of the list (0 = head), or null when the list is shorter.</summary>
@@ -155,22 +292,31 @@ internal static class PhysicsToiScan
     }
 
     // Main thread only; logged every 60 s so the threshold and the pass count can be checked in game logs.
-    private static long _calls, _passes, _classified, _parallelPasses, _lastLog = System.Diagnostics.Stopwatch.GetTimestamp();
+    private static long _calls, _passes, _contacts, _classified, _parallelPasses, _lastLog = System.Diagnostics.Stopwatch.GetTimestamp();
 
     private static void ClassifyAll(Scratch s)
     {
+        Prepare(s);
+        int n = s.WorkCount;
         _passes++;
-        _classified += s.Count;
-        if (s.Count >= ParallelThreshold) _parallelPasses++;
-        if (s.Count >= ParallelThreshold && FastParallel.IsRunning && FastParallel.ThreadCount > 0)
-            FastParallel.For(0, s.Count, ClassifyBatch, s);
+        _contacts += s.Count;
+        _classified += n;
+        if (n >= ParallelThreshold && FastParallel.IsRunning && FastParallel.ThreadCount > 0)
+        {
+            _parallelPasses++;
+            FastParallel.For(0, n, ClassifyBatch, s);
+        }
         else
-            ClassifyBatch(0, s.Count, s);
+        {
+            ClassifyBatch(0, n, s);
+        }
+        if (Verify) VerifyAll(s);
     }
     private static void LogStats()
     {
         _lastLog = System.Diagnostics.Stopwatch.GetTimestamp();
-        Log.Info(FormattableString.Invariant($"PhysicsToiScan: {_calls} steps, {_passes / (double)_calls:F2} passes/step, {_classified / (double)Math.Max(1, _passes):F0} contacts/pass, {_parallelPasses} parallel passes"));
+        double passes = Math.Max(1, _passes);
+        Log.Info(FormattableString.Invariant($"PhysicsToiScan: {_calls} steps, {_passes / (double)_calls:F2} passes/step, {_contacts / passes:F0} contacts/pass, {_classified / passes:F0} classified/pass, {_parallelPasses} parallel passes, incremental {Incremental}, verify {Verify} mismatches {VerifyMismatches}"));
     }
 
     /// <summary>Vanilla World.SolveTOI; the contact scan reads the parallel classification.</summary>
@@ -244,6 +390,8 @@ internal static class PhysicsToiScan
                         float t = output.T;
                         num2 = next2._toi = output.State != TOIOutputState.Touching ? 1f : Mathx.Min(alpha + (1f - alpha) * t, 1f);
                         next2.TOIFlag = true;
+                        kind[i] = Cached; // what Classify returns next pass unless its bodies are marked
+                        toiCache[i] = num2;
                     }
                     if (num2 < num)
                     {
@@ -256,6 +404,8 @@ internal static class PhysicsToiScan
                 Fixture fixtureB2 = contact.FixtureB;
                 Body body3 = fixtureA2.Body ?? throw new InvalidOperationException("contact fixture without body");
                 Body body4 = fixtureB2.Body ?? throw new InvalidOperationException("contact fixture without body");
+                MarkDirty(scratch, body3);
+                MarkDirty(scratch, body4);
                 Sweep sweep = body3._sweep;
                 Sweep sweep2 = body4._sweep;
                 body3.Advance(num);
@@ -294,6 +444,7 @@ internal static class PhysicsToiScan
                         Body other = contactEdge.Other;
                         if ((other.BodyType != BodyType.Dynamic || body5.IsBullet || other.IsBullet) && !contact2.FixtureA.IsSensor && !contact2.FixtureB.IsSensor)
                         {
+                            MarkDirty(scratch, other);
                             Sweep sweep3 = other._sweep;
                             if (!other._island) other.Advance(num);
                             contact2.Update(contactManager);
@@ -331,6 +482,7 @@ internal static class PhysicsToiScan
                 for (int k = 0; k < island.BodyCount; k++)
                 {
                     Body body6 = island.Bodies[k];
+                    MarkDirty(scratch, body6);
                     body6._island = false;
                     if (body6.BodyType == BodyType.Dynamic)
                     {
@@ -349,8 +501,9 @@ internal static class PhysicsToiScan
         }
         finally
         {
-            Array.Clear(scratch.Reversed, 0, scratch.Count); // keep no contact alive between steps
-            scratch.Count = 0;
+            Array.Clear(scratch.Reversed, 0, scratch.Count); // keep no contact or body alive between steps
+            scratch.Count = scratch.Classified = 0;
+            ClearBodies(scratch);
             Pool.Push(scratch);
         }
     }
