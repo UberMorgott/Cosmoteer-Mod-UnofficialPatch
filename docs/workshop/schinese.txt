@@ -1,6 +1,6 @@
 Unofficial Patch
 [h1]Unofficial Patch[/h1]
-[i]原版 Cosmoteer 的社区修复: 大型战斗中更高的 FPS 和游戏速度, 更少卡顿, 更少多人游戏不同步。舰船、部件、平衡和画面保持原版。[/i]
+[i]原版 Cosmoteer 的非官方补丁: 大型战斗中更高的 FPS 和游戏速度, 更少卡顿, 更少多人游戏不同步。舰船、部件、平衡和画面保持原版。[/i]
 [b]需要 [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url]。[/b] 多人游戏中所有人需使用相同版本。
 [b]整个模组 vs 原版[/b], 40 艘舰船战斗, 60 秒平均值: x1 18.4 → 28.9 FPS, 游戏速度 12.9 → 17.5 步/秒; x8 7.6 → 21.2 FPS, 最慢 1% 的帧 276 → 133 ms; 内存垃圾 -65%。
 截图: 同一场战斗中同一模拟步时的原版和模组。每张图都显示游戏自带的该帧 FPS 计数器, 并单独标出 60 秒平均值。

@@ -1,6 +1,6 @@
 Unofficial Patch
 [h1]Unofficial Patch[/h1]
-[i]Community fixes for vanilla Cosmoteer: higher FPS and faster game speed in big battles, fewer stutters, fewer multiplayer desyncs. Ships, parts, balance and visuals stay vanilla.[/i]
+[i]Unofficial patch for vanilla Cosmoteer: higher FPS and faster game speed in big battles, fewer stutters, fewer multiplayer desyncs. Ships, parts, balance and visuals stay vanilla.[/i]
 [b]Requires [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].[/b] In multiplayer everyone needs the same version.
 [b]Whole mod vs vanilla[/b], 40-ship battle, 60-second average: x1 18.4 → 28.9 FPS, game speed 12.9 → 17.5 steps/s; x8 7.6 → 21.2 FPS, slowest 1% of frames 276 → 133 ms; memory garbage -65%.
 Screenshots: vanilla and the mod at the same simulation step of the same battle. Each shows the game's own FPS counter for that one frame and, separately, the 60-second average.

@@ -1,6 +1,6 @@
 Unofficial Patch
 [h1]Unofficial Patch[/h1]
-[i]Arreglos de la comunidad para Cosmoteer vanilla: más FPS y más velocidad de juego en batallas grandes, menos tirones, menos desincronizaciones en multijugador. Naves, piezas, equilibrio y gráficos siguen siendo vanilla.[/i]
+[i]Parche no oficial para Cosmoteer vanilla: más FPS y más velocidad de juego en batallas grandes, menos tirones, menos desincronizaciones en multijugador. Naves, piezas, equilibrio y gráficos siguen siendo vanilla.[/i]
 [b]Requiere [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].[/b] En multijugador todos necesitan la misma versión.
 [b]Mod completo vs vanilla[/b], batalla de 40 naves, media de 60 segundos: x1 18.4 → 28.9 FPS, velocidad de juego 12.9 → 17.5 pasos/s; x8 7.6 → 21.2 FPS, 1% de frames más lentos 276 → 133 ms; basura de memoria -65%.
 Capturas: vanilla y el mod en el mismo paso de simulación de la misma batalla. Cada una muestra el contador de FPS del propio juego para ese frame y, por separado, la media de 60 segundos.

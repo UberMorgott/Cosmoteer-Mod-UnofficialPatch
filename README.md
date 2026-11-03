@@ -1,6 +1,6 @@
 # Unofficial Patch for Cosmoteer
 
-Community unofficial patch for vanilla Cosmoteer: fewer garbage-collection
+Unofficial patch for vanilla Cosmoteer: fewer garbage-collection
 stutters and fixes for vanilla multiplayer desyncs. Ships, parts, balance and
 visuals stay vanilla. Full list of fixes: [FIXES.md](FIXES.md).
 

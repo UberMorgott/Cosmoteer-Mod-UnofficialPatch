@@ -1,6 +1,6 @@
 Unofficial Patch
 [h1]Unofficial Patch[/h1]
-[i]Community-Fixes für Vanilla-Cosmoteer: mehr FPS und höheres Spieltempo in großen Schlachten, weniger Ruckler, weniger Multiplayer-Desyncs. Schiffe, Teile, Balance und Grafik bleiben Vanilla.[/i]
+[i]Inoffizieller Patch für Vanilla-Cosmoteer: mehr FPS und höheres Spieltempo in großen Schlachten, weniger Ruckler, weniger Multiplayer-Desyncs. Schiffe, Teile, Balance und Grafik bleiben Vanilla.[/i]
 [b]Benötigt [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].[/b] Im Multiplayer braucht jeder dieselbe Version.
 [b]Ganzer Mod vs. Vanilla[/b], Schlacht mit 40 Schiffen, Durchschnitt über 60 Sekunden: x1 18.4 → 28.9 FPS, Spieltempo 12.9 → 17.5 Schritte/s; x8 7.6 → 21.2 FPS, langsamstes 1% der Frames 276 → 133 ms; Speichermüll -65%.
 Screenshots: Vanilla und der Mod beim selben Simulationsschritt derselben Schlacht. Jeder zeigt den FPS-Zähler des Spiels für genau diesen Frame und getrennt davon den 60-Sekunden-Durchschnitt.
