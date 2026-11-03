@@ -48,7 +48,7 @@ public sealed class BeamFrozenTests
     [InlineData(null, false)]
     [InlineData("0", false)]
     [InlineData("1", true)]
-    public void ExplicitOptInOnly(string? value, bool expected) => Assert.Equal(expected, BeamParallel.IsRequested(value));
+    public void ExplicitOptInOnly(string? value, bool expected) => Assert.Equal(expected, BeamFrozen.IsRequested(value));
 
     [Fact]
     public void DeliveryTargetIsNotSharedGeneric()

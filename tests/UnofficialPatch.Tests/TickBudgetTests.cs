@@ -76,8 +76,8 @@ public sealed class TickBudgetTests
     [Fact]
     public void TranspilerReplacesOnlyTheDeltaTimeCall()
     {
-        List<CodeInstruction> original = PatchProcessor.GetOriginalInstructions(TickBudget.Pacing.Target);
-        List<CodeInstruction> code = TickBudget.Pacing.Transpiler(PatchProcessor.GetOriginalInstructions(TickBudget.Pacing.Target)).ToList();
+        List<CodeInstruction> original = PatchProcessor.GetOriginalInstructions(TickBudget.Pacing.Update);
+        List<CodeInstruction> code = TickBudget.Pacing.Transpiler(PatchProcessor.GetOriginalInstructions(TickBudget.Pacing.Update)).ToList();
         Assert.Equal(original.Count, code.Count);
         Assert.Equal(1, original.Count(ci => ci.Calls(TickBudget.Pacing.Vanilla)));
         Assert.DoesNotContain(code, ci => ci.Calls(TickBudget.Pacing.Vanilla));
@@ -91,7 +91,7 @@ public sealed class TickBudgetTests
     [Fact]
     public void TranspilerRejectsChangedIl()
     {
-        List<CodeInstruction> original = PatchProcessor.GetOriginalInstructions(TickBudget.Pacing.Target);
+        List<CodeInstruction> original = PatchProcessor.GetOriginalInstructions(TickBudget.Pacing.Update);
         original.Insert(0, new CodeInstruction(OpCodes.Nop));
         Assert.Throws<InvalidOperationException>(() => TickBudget.Pacing.Transpiler(original).ToList());
     }
@@ -99,7 +99,7 @@ public sealed class TickBudgetTests
     [Fact]
     public void PatchesOnlySinglePlayerManager()
     {
-        Assert.Equal(typeof(SPManager), TickBudget.Pacing.Target.DeclaringType);
+        Assert.Equal(typeof(SPManager), TickBudget.Pacing.Update.DeclaringType);
         Assert.True(typeof(SPManager).IsSealed);
         Assert.False(typeof(RecordableSPManager).IsSubclassOf(typeof(SPManager)));
     }

@@ -41,14 +41,14 @@ internal static class TickBudget
     internal static readonly MethodInfo Target = AccessTools.Method(typeof(SimRoot), "FixedUpdate", Type.EmptyTypes)
         ?? throw new MissingMethodException(nameof(SimRoot), "FixedUpdate");
 
-    internal static (MethodBase Target, Type Patch)[] Patches => Requested ? [(Target, typeof(TickBudget)), (Pacing.Target, typeof(Pacing))] : [];
+    internal static (MethodBase Target, Type Patch)[] Patches => Requested ? [(Target, typeof(TickBudget)), (Pacing.Update, typeof(Pacing))] : [];
 
     /// <summary>Replaces the single <c>call GetTargetAdjustedDeltaTime</c> in SPManager.Update with <c>call DeltaTime(NetManager)</c>.</summary>
     internal static class Pacing
     {
         private const string IlSha256 = "E32E78E0BB0AF25444AC043CA848567671AA6E389A2C7BCC3601E0653E071480";
 
-        internal static readonly MethodInfo Target = AccessTools.Method(typeof(SPManager), nameof(SPManager.Update))
+        internal static readonly MethodInfo Update = AccessTools.Method(typeof(SPManager), nameof(SPManager.Update))
             ?? throw new MissingMethodException(nameof(SPManager), nameof(SPManager.Update));
 
         internal static readonly MethodInfo Vanilla = AccessTools.Method(typeof(NetManager), nameof(NetManager.GetTargetAdjustedDeltaTime))

@@ -35,8 +35,6 @@ internal static class Patcher
         .. SmoothedActiveSet.Patches,
         .. AtlasRangeUpload.Patches,
         .. ParallelIdleParking.Patches,
-        .. BeamTargetMemo.Patches,
-        .. BeamParallel.Patches,
         .. BeamFrozen.Patches,
         .. BeamOwnBodySkip.Patches,
         (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
@@ -105,8 +103,6 @@ internal static class Patcher
             if (AtlasRangeUpload.Requested) _ = AtlasRangeUpload.Initialize();
             FastParallelStats.ApplyThreads();
             if (ParallelIdleParking.Requested) _ = ParallelIdleParking.Initialize();
-            if (BeamTargetMemo.Requested) _ = BeamTargetMemo.Initialize();
-            if (BeamParallel.Requested) _ = BeamParallel.Initialize();
             if (BeamFrozen.Requested) _ = BeamFrozen.Initialize();
             if (BeamOwnBodySkip.Requested) _ = BeamOwnBodySkip.Initialize();
             if (GlowQuantize.Requested) _ = GlowQuantize.Initialize();
@@ -134,8 +130,6 @@ internal static class Patcher
         BlueprintToggleEvaluation.EndValidatedUpdate();
         BlueprintToggleUpdates.Disable();
         SmoothedActiveSet.Disable();
-        BeamTargetMemo.Disable();
-        BeamParallel.Disable();
         BeamFrozen.Disable();
         BeamOwnBodySkip.Disable();
         ParallelIdleParking.Disable();

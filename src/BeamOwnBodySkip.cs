@@ -34,8 +34,8 @@ namespace UnofficialPatch;
 /// shows them pure (audited mode pair, static beam shape, vetted target graph with no lazy refresh pending): only the number
 /// of these pure calls changes. Census per body is cached on FixtureList version and a ship-fixture category epoch
 /// (UserData is set before a fixture is added). The skip applies only to the armed beam raycast itself (World.RayCast
-/// depth), never to nested queries. Off (native) on foreign Harmony patches, changed game files or with the beam target
-/// memo prototype. Off: <c>UNOFFICIAL_PATCH_BEAM_OWN_SKIP=0</c>.
+/// depth), never to nested queries. Off (native) on foreign Harmony patches or changed game files.
+/// Off: <c>UNOFFICIAL_PATCH_BEAM_OWN_SKIP=0</c>.
 /// </summary>
 internal static class BeamOwnBodySkip
 {
@@ -289,7 +289,6 @@ internal static class BeamOwnBodySkip
         _attempted = true;
         try
         {
-            if (BeamTargetMemo.Requested) throw new NotSupportedException("beam target memo prototype requested (counts native target calls)");
             Director director = App.Director ?? throw new NotSupportedException("requires the native Director");
             BeamParallel.ValidateNative(); // file + IL pins of every predicate and target getter the decision calls
             foreach ((MethodBase target, Type patch) in Targets)

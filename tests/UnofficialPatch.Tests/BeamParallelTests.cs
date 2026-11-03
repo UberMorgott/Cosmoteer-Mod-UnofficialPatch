@@ -12,8 +12,6 @@ using Cosmoteer.Modes.Creative;
 using Cosmoteer.Ships;
 using Cosmoteer.Ships.Parts;
 using Cosmoteer.Ships.Parts.Defenses;
-using Cosmoteer.Ships.Parts.Effects;
-using Cosmoteer.Ships.Parts.Logic;
 using Cosmoteer.Ships.Parts.Weapons;
 using Cosmoteer.Simulation;
 using Halfling.Geometry;
@@ -33,13 +31,6 @@ namespace UnofficialPatch.Tests;
 [Collection(nameof(BeamParallelTests))]
 public sealed class BeamParallelTests
 {
-    [Theory]
-    [InlineData(null, false)]
-    [InlineData("0", false)]
-    [InlineData("true", false)]
-    [InlineData("1", true)]
-    public void ExplicitOptInOnly(string? value, bool expected) => Assert.Equal(expected, BeamParallel.IsRequested(value));
-
     [Fact]
     public void NativeDependenciesArePinned() => BeamParallel.ValidateNative();
 
@@ -59,47 +50,26 @@ public sealed class BeamParallelTests
     }
 
     [Fact]
-    public void PatchTargetsAreNotSharedGeneric()
-    {
-        foreach (MethodBase target in new MethodBase[] { BeamParallel.BucketTarget, BeamParallel.EmitTarget, BeamParallel.HitInfoTarget, BeamParallel.StopTarget,
-            BeamParallel.AttenuateTarget, BeamParallel.DieTarget, BeamParallel.EffectTarget })
-        {
-            Assert.NotNull(target);
-            Assert.False(SharedGenericRetarget.IsShared(target), target.Name);
-        }
-    }
-
-    [Fact]
     public void CompatibilityCacheSeesEveryHarmonyChange()
     {
         var harmony = new Harmony("UnofficialPatch.Tests.BeamParallel.State");
         try
         {
-            BeamParallel.RememberHarmonyState();
-            Assert.True(BeamParallel.HarmonyStateUnchanged());
+            var snapshot = new BeamParallel.HarmonySnapshot();
+            snapshot.Remember();
+            Assert.True(snapshot.Unchanged());
             MethodInfo target = AccessTools.Method(typeof(BeamParallelTests), nameof(PatchTarget));
             harmony.Patch(target, prefix: new HarmonyMethod(typeof(BeamParallelTests), nameof(PatchPrefix)));
-            Assert.False(BeamParallel.HarmonyStateUnchanged());
-            BeamParallel.RememberHarmonyState();
-            Assert.True(BeamParallel.HarmonyStateUnchanged());
+            Assert.False(snapshot.Unchanged());
+            snapshot.Remember();
+            Assert.True(snapshot.Unchanged());
             harmony.Unpatch(target, HarmonyPatchType.Prefix, harmony.Id); // same key, replaced patch-info array
-            Assert.False(BeamParallel.HarmonyStateUnchanged());
+            Assert.False(snapshot.Unchanged());
         }
         finally { harmony.UnpatchAll(harmony.Id); }
     }
     [MethodImpl(MethodImplOptions.NoInlining)] private static int PatchTarget() => 1;
     private static void PatchPrefix() { }
-
-    [Fact]
-    public void ValueEventHookIsInsertedBeforeBothNativeEvents()
-    {
-        var original = PatchProcessor.GetOriginalInstructions(BeamParallel.EmitTarget);
-        var code = BeamParallel.EmitHook.Transpiler(PatchProcessor.GetOriginalInstructions(BeamParallel.EmitTarget)).ToList();
-        Assert.Equal(original.Count + 6, code.Count);
-        MethodInfo hook = AccessTools.Method(typeof(BeamParallel.EmitHook), nameof(BeamParallel.EmitHook.BeforeValueEvent));
-        Assert.Equal(2, code.Count(c => c.Calls(hook)));
-        Assert.Equal(original.SelectMany(c => c.labels).Count(), code.SelectMany(c => c.labels).Count());
-    }
 
     // --- Differential: worker query vs native GetHitInfo -----------------------------------------------------------
 
@@ -122,12 +92,9 @@ public sealed class BeamParallelTests
             using var session = f.Speculate(workers);
             var record = Assert.Single(session.Session.Records);
             Assert.Equal(BeamParallel.Outcome.Ready, record.Outcome);
-            HitInfo taken = f.Take(out bool accepted);
-            Assert.True(accepted, f.Reasons());
-            try
+            Assert.Null(BeamParallel.Difference(native, record.Info));
+            Assert.True(f.RandAfterNative == f.RandState(), "preparation must consume exactly the native RNG draws");
             {
-                Assert.Null(BeamParallel.Difference(native, taken));
-                Assert.True(f.RandAfterNative == f.RandState(), "replay must consume exactly the native RNG draws");
                 // Each scenario reaches the native branch it names.
                 switch (scenario)
                 {
@@ -145,7 +112,6 @@ public sealed class BeamParallelTests
                     case "crew-behind": Assert.Same(f.Crew, native.Operational.Hit.Crew); Assert.NotNull(native.Structural.Part); Assert.NotEmpty(native.AllStructuralHits!); break;
                 }
             }
-            finally { taken.Dispose(); }
         }
         finally { native.Dispose(); }
     }
@@ -168,89 +134,28 @@ public sealed class BeamParallelTests
         Assert.Equal(results[0], results[2]);
     }
 
+    /// <summary>A derived crew type is unaudited: the worker stops at it (that beam then runs on the serial path).</summary>
     [Fact]
-    public void ChangedInputFallsBackAndInvalidatesTheRest()
-    {
-        using var f = new Setup("operational", beams: 3);
-        using var session = f.Speculate(2);
-        f.Beams[0]._length += 1f; // query input changed after the snapshot (isInit=false path reads _length)
-        f.Beams[0]._hitStartTime = Time.Zero;
-        _ = f.Take(out bool accepted, beam: 0);
-        Assert.False(accepted);
-        Assert.False(session.Session.Valid);
-        _ = f.Take(out accepted, beam: 1);
-        Assert.False(accepted);
-        Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k.StartsWith("replay native: after barrier", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void BarrierInvalidatesRemainingRecords()
-    {
-        using var f = new Setup("operational", beams: 2);
-        using var session = f.Speculate(1);
-        HitInfo first = f.Take(out bool accepted, beam: 0);
-        Assert.True(accepted, f.Reasons());
-        first.Dispose();
-        BeamParallel.DieHook.Prefix();
-        _ = f.Take(out accepted, beam: 1);
-        Assert.False(accepted);
-    }
-
-    [Fact]
-    public void RemovedEmitterRecordIsDisposedUnused()
-    {
-        using var f = new Setup("structural-penetration", beams: 2);
-        var session = f.Speculate(2);
-        var hits = session.Session.Records.Select(r => r.Info.AllStructuralHits).ToList();
-        Assert.All(hits, Assert.NotNull);
-        session.Dispose(); // the bucket ends without the emitters running (removed or suppressed)
-        Assert.All(hits, h => Assert.Empty(h!));
-    }
-
-    /// <summary>
-    /// Every beam of a round crossing exact crew: all handled on workers and replayed in native order, each result equal to
-    /// the native query at its replay point (the crew hit first, ship hits after).
-    /// </summary>
-    [Fact]
-    public void CrewRoundReplaysEveryRecordInOrder()
-    {
-        using var f = new Setup("crew-behind", beams: 3);
-        using var session = f.Speculate(2);
-        Assert.All(session.Session.Records, r => Assert.Equal(BeamParallel.Outcome.Ready, r.Outcome));
-        for (int i = 0; i < 3; i++)
-        {
-            HitInfo native = f.Native(i);
-            HitInfo taken = f.Take(out bool accepted, i);
-            try
-            {
-                Assert.True(accepted, f.Reasons());
-                Assert.Null(BeamParallel.Difference(native, taken));
-                Assert.Equal(i == 0, taken.Operational.Hit.Crew != null);
-            }
-            finally { taken.Dispose(); native.Dispose(); }
-        }
-        Assert.True(session.Session.Valid);
-    }
-
-    /// <summary>A derived crew type is unaudited: that beam runs natively and every later record is invalidated.</summary>
-    [Fact]
-    public void DerivedCrewTypeFallsBackAndInvalidatesTheRest()
+    public void DerivedCrewTypeStopsTheWorker()
     {
         using var f = new Setup("crew-type", beams: 2);
         using var session = f.Speculate(2);
-        BeamParallel.Record first = session.Session.ByEmitter[f.Beams[0]], second = session.Session.ByEmitter[f.Beams[1]];
+        BeamParallel.Record first = session.Session.Records[0], second = session.Session.Records[1];
         Assert.Equal(BeamParallel.Outcome.Native, first.Outcome); Assert.Equal("crew type", first.Reason);
         Assert.Null(first.Info.AllStructuralHits);
         Assert.Equal(BeamParallel.Outcome.Ready, second.Outcome);
-        long lost = BeamParallel.Stats.LostToFallback;
-        _ = f.Take(out bool accepted);
-        Assert.False(accepted);
-        Assert.False(session.Session.Valid);
-        _ = f.Take(out accepted, 1);
-        Assert.False(accepted);
-        Assert.Equal(lost + 1, BeamParallel.Stats.LostToFallback);
-        Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k == "invalidate: native fallback");
-        Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k == "replay native: crew type");
+    }
+
+    /// <summary>An unaudited target getter is refused by the graph check and never invoked.</summary>
+    [Fact]
+    public void UnknownTargetGetterIsNeverInvoked()
+    {
+        RecordingWeapon.Calls = 0;
+        using var f = new Setup("operational");
+        f.Beams[0]._getTargetFrom = Shell<RecordingWeapon>();
+        Assert.False(BeamParallel.QueryGraphVetted(f.Beams[0], f.Sim, out string? why));
+        Assert.Equal("target graph: provider type", why);
+        Assert.Equal(0, RecordingWeapon.Calls);
     }
 
     /// <summary>An unaudited crew filter type stops at the crew, before any native filter code runs on a worker.</summary>
@@ -313,136 +218,9 @@ public sealed class BeamParallelTests
     {
         using var f = new Setup("shield", beams: 4);
         var held = new System.Collections.Concurrent.ConcurrentBag<bool>();
-        BeamParallel.OverrideForTests((count, run) =>
-        {
-            var thread = new Thread(() => { for (int i = 0; i < count; i++) run(i); held.Add(BeamParallel.Ctx.Current.Holds); });
-            thread.Start(); thread.Join();
-        }, allowTestOwner: true);
-        try
-        {
-            BeamParallel.Session s = BeamParallel.BeginWith(f.Sim, [f.Manager])!;
-            Assert.All(s.Records, r => Assert.Equal(BeamParallel.Outcome.Ready, r.Outcome));
-            BeamParallel.End(s);
-        }
-        finally { BeamParallel.OverrideForTests(null, allowTestOwner: true); }
+        using (var session = f.Speculate(1, held))
+            Assert.All(session.Session.Records, r => Assert.Equal(BeamParallel.Outcome.Ready, r.Outcome));
         Assert.Equal([false], held.ToArray());
-    }
-
-    [Fact]
-    public void UnknownTargetGetterOrModifierIsNeverInvoked()
-    {
-        RecordingWeapon.Calls = 0; RecordingModifier.Calls = 0;
-        using (var f = new Setup("operational", beams: 2))
-        {
-            f.Beams[0]._getTargetFrom = Shell<RecordingWeapon>();
-            Set(f.Beams[1].Rules.Range, "Modifiers", new ValueModifier[] { Shell<RecordingModifier>() });
-            (ulong, ulong) rand = f.RandState();
-            float length = f.Beams[0]._length, scale = f.Beams[0]._effectsScale;
-            using var session = f.Speculate(2);
-            Assert.Empty(session.Session.Records); // the first unaudited beam stops the whole round
-            Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k.StartsWith("predict stop: target graph: ", StringComparison.Ordinal));
-            Assert.Equal(rand, f.RandState());
-            Assert.Equal(length, f.Beams[0]._length); Assert.Equal(scale, f.Beams[0]._effectsScale);
-        }
-        using (var f = new Setup("operational", beams: 2))
-        {
-            Set(f.Beams[0].Rules.Spread.Min, "Modifiers", new ValueModifier[] { Shell<RecordingModifier>() });
-            (ulong, ulong) rand = f.RandState();
-            using var session = f.Speculate(1);
-            Assert.Empty(session.Session.Records); // unknown spread: nothing is predicted
-            Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k == "predict stop: spread modifier");
-            Assert.Equal(rand, f.RandState());
-        }
-        Assert.Equal(0, RecordingWeapon.Calls);
-        Assert.Equal(0, RecordingModifier.Calls);
-    }
-
-    /// <summary>
-    /// Beam 0 stops on an unknown shape: its native raycast is unaudited and may change other state (here: another shield),
-    /// so beam 1's precomputed shield hit must be rejected.
-    /// </summary>
-    [Fact]
-    public void UnauditedWorkerFallbackInvalidatesLaterRecords()
-    {
-        using var f = new Setup("chain-shield", beams: 2);
-        using var session = f.Speculate(2);
-        BeamParallel.Record first = session.Session.ByEmitter[f.Beams[0]], second = session.Session.ByEmitter[f.Beams[1]];
-        Assert.Equal(BeamParallel.Outcome.Native, first.Outcome); Assert.Equal("shape", first.Reason);
-        Assert.Equal(BeamParallel.Outcome.Ready, second.Outcome); Assert.Same(f.Shield, second.Info.Operational.Hit.Shield);
-        _ = f.Take(out bool accepted);
-        Assert.False(accepted);
-        Set(f.Shield!, "_cachedArcRadius", (float?)1f); // what the unaudited native raycast could have done
-        _ = f.Take(out accepted, 1);
-        Assert.False(accepted);
-        Assert.False(session.Session.Valid);
-        Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k == "invalidate: native fallback");
-    }
-
-    /// <summary>
-    /// A cold-shield stop: its native replay may warm caches through modifiers or chained virtuals, or reach objects no worker
-    /// inspected. The later record must be rejected even when something it read changes afterwards.
-    /// </summary>
-    [Fact]
-    public void ColdShieldFallbackInvalidatesLaterRecords()
-    {
-        using var f = new Setup("cold-shield", beams: 6);
-        using var session = f.Speculate(2);
-        BeamParallel.Record? stop = session.Session.Records.FirstOrDefault(r => r.Reason == "cold shield");
-        BeamParallel.Record? later = session.Session.Records.LastOrDefault(r => r.Outcome == BeamParallel.Outcome.Ready);
-        Assert.NotNull(stop); Assert.NotNull(later); Assert.True(stop.Order < later.Order);
-        long lost = BeamParallel.Stats.LostToFallback;
-        for (int i = 0; i <= stop.Order; i++) f.Take(out _, i).Dispose();
-        Set(f.Shield!, "_cachedArcRadius", (float?)1f); // an unaudited native side effect
-        _ = f.Take(out bool accepted, later.Order);
-        Assert.False(accepted);
-        Assert.False(session.Session.Valid);
-        Assert.True(BeamParallel.Stats.LostToFallback > lost);
-    }
-    [Fact]
-    public void UnknownRangeModifierIsNeverInvoked()
-    {
-        RecordingModifier.Calls = 0;
-        using var f = new Setup("operational", beams: 2);
-        Set(f.Beams[1].Rules.Range, "Modifiers", new ValueModifier[] { Shell<RecordingModifier>() });
-        using var session = f.Speculate(2);
-        Assert.Single(session.Session.Records); // beam 0 only; prediction stopped at beam 1
-        Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k == "predict stop: range modifier");
-        Assert.Equal(0, RecordingModifier.Calls);
-    }
-
-    /// <summary>An unaudited first beam whose native getter changes a shield input: no later record (same or other ship) survives.</summary>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void UnauditedBeamStopsTheRoundBeforeLaterRecords(bool otherShip)
-    {
-        using var f = new Setup("shield", beams: otherShip ? 1 : 2, secondShip: otherShip);
-        BeamEmitter first = f.Beams[0], second = otherShip ? f.SecondBeams[0] : f.Beams[1];
-        first._getTargetFrom = Shell<MutatingWeapon>();
-        MutatingWeapon.Shield = f.Shield;
-        try
-        {
-            using var session = f.Speculate(2);
-            Assert.False(session.Session.ByEmitter.ContainsKey(second));
-            Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k.StartsWith("predict stop: target graph: ", StringComparison.Ordinal));
-            _ = first.GetShipTarget(checkProhibited: true); // the first beam's native run: its getter shrinks the shield
-            Assert.Equal(1f, f.Shield!._cachedArcRadius);
-            _ = f.Take(out bool accepted, second);
-            Assert.False(accepted);
-        }
-        finally { MutatingWeapon.Shield = null; }
-    }
-
-    [Fact]
-    public void OffsetDrawMismatchRestoresNativeRng()
-    {
-        using var f = new Setup("offset");
-        using var session = f.Speculate(1);
-        f.Beams[0].Rules.RandomOffsetRadius!.Value.Max.BaseValue = 9f; // offset circle changed after the snapshot
-        _ = f.Take(out bool accepted);
-        Assert.False(accepted);
-        Assert.Equal(f.StateBeforeTake, f.RandState()); // the replay draw was rolled back: native draws it again
-        Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k == "replay native: input offset draw");
     }
 
     [Theory]
@@ -490,39 +268,6 @@ public sealed class BeamParallelTests
         }
     }
 
-    [Fact]
-    public void PatchedReplayPipelineMatchesNative()
-    {
-        var harmony = new Harmony("UnofficialPatch.Tests.BeamParallel.Pipeline");
-        try
-        {
-            harmony.Patch(BeamParallel.HitInfoTarget, prefix: new HarmonyMethod(typeof(BeamParallel.TakeHook), nameof(BeamParallel.TakeHook.Prefix)),
-                postfix: new HarmonyMethod(typeof(BeamParallel.TakeHook), nameof(BeamParallel.TakeHook.Postfix)));
-            foreach (string scenario in new[] { "structural-penetration", "offset", "shield" })
-            {
-                using var f = new Setup(scenario);
-                HitInfo native = f.Native(); // no session: the patched method runs natively
-                try
-                {
-                    using var session = f.Speculate(2);
-                    long accepted = BeamParallel.Stats.Accepted;
-                    BeamParallel.EmitHook.BeforeValueEvent(f.Beams[0], 0);
-                    HitInfo replayed = f.PatchedNative();
-                    BeamParallel.EmitHook.BeforeValueEvent(f.Beams[0], 1);
-                    try
-                    {
-                        Assert.Equal(accepted + 1, BeamParallel.Stats.Accepted);
-                        Assert.Null(BeamParallel.Difference(native, replayed));
-                        Assert.Equal(f.RandAfterNative, f.RandState());
-                    }
-                    finally { replayed.Dispose(); }
-                }
-                finally { native.Dispose(); }
-            }
-        }
-        finally { harmony.UnpatchAll(harmony.Id); }
-    }
-
     [System.Diagnostics.CodeAnalysis.SuppressMessage("ReSharper", "ClassCannotBeInstantiated", Justification = "Only uninitialized shells are created.")]
     private sealed class RecordingWeapon : FixedWeapon
     {
@@ -531,151 +276,6 @@ public sealed class BeamParallelTests
         public override Ship? GetShipTarget(bool checkRange, bool checkProhibited) { Calls++; return null; }
         public override ITarget? GetFireTarget(bool checkRange, bool checkArc, bool checkProhibited, bool includeExplicitTarget) { Calls++; return null; }
     }
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ReSharper", "ClassCannotBeInstantiated", Justification = "Only uninitialized shells are created.")]
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ReSharper", "ClassCannotBeInstantiated", Justification = "Only uninitialized shells are created.")]
-    private sealed class MutatingWeapon : FixedWeapon
-    {
-        internal static ArcShield? Shield;
-        private MutatingWeapon() : base(null!) { }
-        public override Ship? GetShipTarget(bool checkRange, bool checkProhibited) { if (Shield != null) Shield._cachedArcRadius = 1f; return null; }
-    }
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ReSharper", "ClassCannotBeInstantiated", Justification = "Only uninitialized shells are created.")]
-    private sealed class RecordingModifier : BuffModifier
-    {
-        internal static int Calls;
-        private RecordingModifier() : base(default(ID<Cosmoteer.Ships.Buffs.BuffType>)) { }
-        public override float GetValue<TStatus>(float value, in ValueModificationData<TStatus> data) { Calls++; return value; }
-    }
-
-    // --- Listener admission ------------------------------------------------------------------------------------------
-
-    [Fact]
-    public void ListenerAdmission()
-    {
-        using var f = new Setup("operational");
-        BeamEmitter beam = f.Beams[0];
-        Assert.True(BeamParallel.Admitted(beam, out _));
-
-        // Audited prism wiring: PartMultiValue with no downstream subscriber, sources exact emitters.
-        PartMultiValue value = f.MultiValue(beam, "cosmoteer.ion_beam_prism", "EmitterValue");
-        Subscribe(beam, value, "OnValueChanged");
-        Assert.True(BeamParallel.Admitted(beam, out string? reason), reason);
-
-        // Changed downstream subscription.
-        EventHandler<EventArgs> downstream = (_, _) => { };
-        SetEvent(value, "ValueChanged", downstream);
-        Assert.False(BeamParallel.Admitted(beam, out reason)); Assert.Contains("downstream", reason);
-        SetEvent(value, "ValueChanged", null);
-        Assert.True(BeamParallel.Admitted(beam, out _));
-
-        // Query-visible pull reader in the same part.
-        var reader = Shell<BeamEmitter>(); Set(reader, "_effectsScaleFactor", value);
-        f.AddComponent(value.Part!, reader);
-        BeamParallel.ResetPullReaderCache(value);
-        Assert.False(BeamParallel.Admitted(beam, out reason)); Assert.Contains("pull reader", reason);
-        f.RemoveComponent(value.Part!, reader);
-        BeamParallel.ResetPullReaderCache(value);
-        var death = Shell<PartDeathEffects>(); Set(death, "_factorHitEffectsWith", value);
-        f.AddComponent(value.Part!, death);
-        Assert.True(BeamParallel.Admitted(beam, out reason), reason);
-
-        // Outside the audited wiring.
-        PartMultiValue other = f.MultiValue(beam, "cosmoteer.other_part", "EmitterValue");
-        Subscribe(beam, other, "OnValueChanged");
-        Assert.False(BeamParallel.Admitted(beam, out reason)); Assert.Contains("prism", reason);
-        SetEvent(beam, "e_valueChanged", null);
-
-        // Proxy listener: exact proxy, null downstream, chain ending in an exact emitter.
-        BeamEmitterProxy proxy = f.Proxy(beam);
-        Subscribe(beam, proxy, "OnEmitterValueChanged");
-        Assert.True(BeamParallel.Admitted(beam, out reason), reason);
-        SetEvent(proxy, "ValueChanged", downstream);
-        Assert.False(BeamParallel.Admitted(beam, out reason));
-        SetEvent(proxy, "ValueChanged", null);
-        // Unknown proxy target and a cycle.
-        Set(proxy._proxy, "<ProxiedComponent>k__BackingField", Shell<ForeignBeamEmitter>());
-        Assert.False(BeamParallel.Admitted(beam, out reason)); Assert.Contains("chain", reason);
-        BeamEmitterProxy loop = f.Proxy(beam); Set(loop._proxy, "<ProxiedComponent>k__BackingField", proxy);
-        Set(proxy._proxy, "<ProxiedComponent>k__BackingField", loop);
-        Assert.False(BeamParallel.ProxyChain(proxy));
-        SetEvent(beam, "e_valueChanged", null);
-
-        // Unknown listener and trigger subscriber.
-        SetEvent(beam, "e_valueChanged", downstream);
-        Assert.False(BeamParallel.Admitted(beam, out reason)); Assert.Contains("unknown value listener", reason);
-        SetEvent(beam, "e_valueChanged", null);
-        SetEvent(beam, "HitIntervalElapsed", new EventHandler<TriggerEventArgs>((_, _) => { }));
-        Assert.False(BeamParallel.Admitted(beam, out reason)); Assert.Contains("trigger", reason);
-    }
-
-    [Fact]
-    public void StopAdmission()
-    {
-        using var f = new Setup("operational");
-        BeamEmitter beam = f.Beams[0];
-        Set(beam, "<IsToggleOn>k__BackingField", true);
-        Assert.True(BeamParallel.StopAdmitted(beam, f.Sim, out string? reason), reason);
-        // A toggle listener can cascade into operational toggles or synchronous fires.
-        SetEvent(beam, "ToggleChanged", new EventHandler<EventArgs>((_, _) => { }));
-        Assert.False(BeamParallel.StopAdmitted(beam, f.Sim, out reason)); Assert.Contains("toggle", reason);
-        // Already off: StopEmission does not fire ToggleChanged.
-        Set(beam, "<IsToggleOn>k__BackingField", false);
-        Assert.True(BeamParallel.StopAdmitted(beam, f.Sim, out reason), reason);
-        // Value listeners are admitted as at the value event.
-        SetEvent(beam, "e_valueChanged", new EventHandler<EventArgs>((_, _) => { }));
-        Assert.False(BeamParallel.StopAdmitted(beam, f.Sim, out reason)); Assert.Contains("unknown value listener", reason);
-    }
-
-    /// <summary>With end media, StopEmission reads GetShipTarget and rule values first (BeamEmitter.cs:794-807): an unaudited getter is a barrier and is never invoked by the check.</summary>
-    [Fact]
-    public void StopWithEndMediaVetsItsGetters()
-    {
-        RecordingWeapon.Calls = 0;
-        using var f = new Setup("operational", beams: 2);
-        BeamEmitter beam = f.Beams[0];
-        Set(beam.Rules, "EndMediaEffects", Shell<Cosmoteer.Simulation.MediaEffects.MultiMediaEffectRules>());
-        Set(beam.Rules, "BeamMediaEffectsIntensity", Shell<ModifiableFloat>());
-        Set(beam.Rules, "RampUpTime", Shell<ModifiableTime>());
-        Assert.True(BeamParallel.StopAdmitted(beam, f.Sim, out string? reason), reason);
-        beam._getTargetFrom = Shell<RecordingWeapon>();
-        Assert.False(BeamParallel.StopAdmitted(beam, f.Sim, out reason)); Assert.Contains("target graph", reason);
-        beam._getTargetFrom = null;
-        Set(beam.Rules.RampUpTime, "Modifiers", new ValueModifier[] { Shell<RecordingModifier>() });
-        Assert.False(BeamParallel.StopAdmitted(beam, f.Sim, out reason)); Assert.Contains("end media", reason);
-        beam.Rules.RampUpTime.Modifiers = null;
-        beam._attachedBeamMediaEffectsTo = Shell<BeamEmitter>();
-        Assert.False(BeamParallel.StopAdmitted(beam, f.Sim, out reason)); Assert.Contains("attachment", reason);
-        Assert.Equal(0, RecordingWeapon.Calls);
-        using var session = f.Speculate(1);
-        BeamParallel.StopHook.Prefix(beam);
-        Assert.False(session.Session.Valid);
-    }
-
-    [Fact]
-    public void AdmittedStopKeepsTheRoundValid()
-    {
-        using var f = new Setup("operational", beams: 2);
-        using var session = f.Speculate(1);
-        BeamParallel.StopHook.Prefix(f.Beams[0]);
-        Assert.True(session.Session.Valid, f.Reasons());
-        SetEvent(f.Beams[0], "e_valueChanged", new EventHandler<EventArgs>((_, _) => { }));
-        BeamParallel.StopHook.Prefix(f.Beams[0]);
-        Assert.False(session.Session.Valid);
-    }
-    [Fact]
-    public void UnadmittedListenerAtValueEventInvalidatesTheRound()
-    {
-        using var f = new Setup("operational", beams: 2);
-        using var session = f.Speculate(1);
-        SetEvent(f.Beams[1], "e_valueChanged", new EventHandler<EventArgs>((_, _) => { }));
-        HitInfo first = f.Take(out bool accepted, beam: 0);
-        Assert.True(accepted, f.Reasons());
-        first.Dispose();
-        _ = f.Take(out accepted, beam: 1);
-        Assert.False(accepted);
-        Assert.False(session.Session.Valid);
-    }
-
     /// <summary>An unaudited crew type (never constructed; shells only).</summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("ReSharper", "ClassCannotBeInstantiated", Justification = "Only uninitialized shells are created.")]
     private sealed class ForeignCrew : SpaceCrew
@@ -683,27 +283,13 @@ public sealed class BeamParallelTests
         private ForeignCrew() : base(null!, default, default) { }
     }
 
-    /// <summary>An unaudited IBeamEmitter implementation (never constructed; shells only).</summary>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("ReSharper", "ClassCannotBeInstantiated", Justification = "Only uninitialized shells are created.")]
-    private sealed class ForeignBeamEmitter : BeamEmitter
-    {
-        private ForeignBeamEmitter() : base(null!) { }
-    }
-
     // --- Harness -------------------------------------------------------------------------------------------------------
 
-    private static void Subscribe(BeamEmitter beam, object target, string method)
-    {
-        var handler = AccessTools.Method(target.GetType(), method).CreateDelegate<EventHandler<EventArgs>>(target);
-        var field = AccessTools.Field(typeof(BeamEmitter), "e_valueChanged");
-        field.SetValue(beam, Delegate.Combine((Delegate?)field.GetValue(beam), handler));
-    }
-    private static void SetEvent(object instance, string name, Delegate? value) => Set(instance, name, value);
 
-    internal sealed class Speculation(BeamParallel.Session session) : IDisposable
+    internal sealed class Speculation(BeamFrozen.Session session) : IDisposable
     {
-        internal BeamParallel.Session Session { get; } = session;
-        public void Dispose() { if (BeamParallel.Active == Session) BeamParallel.End(Session); }
+        internal BeamFrozen.Session Session { get; } = session;
+        public void Dispose() => BeamFrozen.End(Session);
     }
 
     private sealed class Setup : IDisposable
@@ -714,15 +300,12 @@ public sealed class BeamParallelTests
         internal readonly Ship Source;
         internal readonly WeaponManager Manager = Shell<WeaponManager>();
         internal readonly List<BeamEmitter> Beams = [];
-        internal readonly List<BeamEmitter> SecondBeams = [];
-        internal readonly List<WeaponManager> Managers = [];
         private readonly string _scenario;
         internal (ulong, ulong) RandAfterNative;
 
-        internal Setup(string scenario, int beams = 1, bool secondShip = false)
+        internal Setup(string scenario, int beams = 1)
         {
             _scenario = scenario;
-            BeamParallel.Stats.Reasons.Clear();
             Sim.SceneThread = Thread.CurrentThread; Sim.Game = Game; Game.NetManager = Shell<SPManager>();
             Set(Sim, "_sourcePlayerStack", new Stack<ActionSourcePlayer?>());
             var mode = Shell<CreativeSimModeManager>(); Set(Sim, "<Mode>k__BackingField", mode); Set(mode, "<Sim>k__BackingField", Sim);
@@ -735,16 +318,6 @@ public sealed class BeamParallelTests
             Set(Source, "<Weapons>k__BackingField", Manager); Set(Manager, "<Ship>k__BackingField", Source);
             for (int i = 0; i < beams; i++) Beams.Add(NewBeam(i, Source));
             Set(Manager, "_emittingBeams", new List<BeamEmitter>(Beams));
-            Managers.Add(Manager);
-            if (secondShip)
-            {
-                Ship second = NewShip(0, new V(0f, -8f), 33);
-                var manager = Shell<WeaponManager>();
-                Set(second, "<Weapons>k__BackingField", manager); Set(manager, "<Ship>k__BackingField", second);
-                SecondBeams.Add(NewBeam(0, second));
-                Set(manager, "_emittingBeams", new List<BeamEmitter>(SecondBeams));
-                Managers.Add(manager);
-            }
             BuildTargets();
             if (IsOwn) BuildOwn();
             World.ProcessChanges();
@@ -946,44 +519,25 @@ public sealed class BeamParallelTests
             Shield = shield;
         }
 
-        internal Speculation Speculate(int workers)
+        /// <summary>BeamFrozen preparation in native order (RNG drawn), then the worker query of every eligible record on fresh threads.</summary>
+        internal Speculation Speculate(int workers, System.Collections.Concurrent.ConcurrentBag<bool>? held = null)
         {
-            BeamParallel.OverrideForTests((count, run) =>
+            var s = new BeamFrozen.Session { Sim = Sim, Binding = new BeamFrozen.Binding { On = true, Workers = true } };
+            foreach (BeamEmitter beam in Manager._emittingBeams) BeamFrozen.PrepareBeam(s, beam);
+
+            var queue = new System.Collections.Concurrent.ConcurrentQueue<BeamFrozen.FrozenRecord>(s.Records.Where(r => r.Eligible));
+            Thread[] threads = Enumerable.Range(0, workers).Select(_ => new Thread(() =>
             {
-                var queue = new System.Collections.Concurrent.ConcurrentQueue<int>(Enumerable.Range(0, count));
-                Thread[] threads = Enumerable.Range(0, workers).Select(_ => new Thread(() => { while (queue.TryDequeue(out int i)) run(i); })).ToArray();
-                foreach (Thread t in threads) t.Start();
-                foreach (Thread t in threads) t.Join();
-            }, allowTestOwner: true);
-            try
-            {
-                BeamParallel.Session s = BeamParallel.BeginWith(Sim, Managers) ?? throw new InvalidOperationException("no session: " + Reasons());
-                return new Speculation(s);
-            }
-            finally { BeamParallel.OverrideForTests(null, allowTestOwner: true); }
+                while (queue.TryDequeue(out BeamFrozen.FrozenRecord? r)) BeamParallel.Run(r, frozen: false);
+                held?.Add(BeamParallel.Ctx.Current.Holds);
+            })).ToArray();
+            foreach (Thread t in threads) t.Start();
+            foreach (Thread t in threads) t.Join();
+            return new Speculation(s);
         }
 
-        internal (ulong, ulong) StateBeforeTake;
-        internal HitInfo PatchedNative()
-        {
-            (V point, Direction direction, bool isInit) = Spread(Beams[0]);
-            return Beams[0].GetHitInfo(point, direction, isInit);
-        }
         internal (ulong, ulong) RandState() { Source.Rand.GetState(out ulong a, out ulong b); return (a, b); }
 
-        /// <summary>DoEmitBeam lines 832-854 natively, then the GetHitInfo prefix.</summary>
-        internal HitInfo Take(out bool accepted, int beam = 0) => Take(out accepted, Beams[beam]);
-        internal HitInfo Take(out bool accepted, BeamEmitter b)
-        {
-            BeamParallel.EmitHook.BeforeValueEvent(b, 0);
-            (V point, Direction direction, bool isInit) = Spread(b);
-            StateBeforeTake = RandState();
-            HitInfo result = default;
-            accepted = !BeamParallel.TakeHook.Prefix(b, point, direction, isInit, ref result, out _);
-            if (!accepted) { result.Dispose(); result = default; }
-            BeamParallel.EmitHook.BeforeValueEvent(b, 1);
-            return result;
-        }
         private static (V, Direction, bool) Spread(BeamEmitter b)
         {
             V point = b.GetWorldSpawnLoc();
@@ -1003,32 +557,8 @@ public sealed class BeamParallelTests
             return info;
         }
 
-        internal string Reasons() => string.Join("; ", BeamParallel.Stats.Reasons.Select(kv => kv.Key + "=" + kv.Value));
-
-        internal PartMultiValue MultiValue(BeamEmitter source, string partId, string componentId)
-        {
-            var partRules = Shell<PartRules>(); Set(partRules, "ID", new ID<PartRules>(partId));
-            var part = Shell<Part>(); Set(part, "<Rules>k__BackingField", partRules); Set(part, "_components", new List<PartComponent>());
-            var rules = Shell<PartMultiValueRules>(); Set(rules, "ID", new ID<PartComponentRules>(componentId));
-            var value = Shell<PartMultiValue>(); Set(value, "<Rules>k__BackingField", rules); Set(value, "<Part>k__BackingField", part);
-            Set(value, "_values", new IPartComponentValue[] { source });
-            AddComponent(part, value);
-            return value;
-        }
-        internal BeamEmitterProxy Proxy(BeamEmitter target)
-        {
-            var proxy = Shell<BeamEmitterProxy>();
-            var handler = Shell<ProxyHandler<IBeamEmitter>>(); Set(handler, "<ProxiedComponent>k__BackingField", target);
-            Set(proxy, "_proxy", handler);
-            return proxy;
-        }
-        internal void AddComponent(Part part, PartComponent component) => part._components.Add(component);
-        internal void RemoveComponent(Part part, PartComponent component) => part._components.Remove(component);
-
         public void Dispose()
         {
-            if (BeamParallel.Active != null) BeamParallel.End(BeamParallel.Active);
-            BeamParallel.OverrideForTests(null, allowTestOwner: false);
             World.Clear();
         }
     }

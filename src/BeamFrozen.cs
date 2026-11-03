@@ -44,9 +44,10 @@ namespace UnofficialPatch;
 /// </summary>
 internal static class BeamFrozen
 {
-    internal static readonly bool Requested = BeamParallel.IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BEAM_FROZEN"));
+    internal static readonly bool Requested = IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BEAM_FROZEN"));
+    internal static bool IsRequested(string? value) => value == "1";
     /// <summary>Diagnostic (<c>UNOFFICIAL_PATCH_BEAM_FROZEN_ORACLE=1</c>): every query on the main thread through the serial path; results must equal the worker runs.</summary>
-    internal static readonly bool OracleRequested = Requested && BeamParallel.IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BEAM_FROZEN_ORACLE"));
+    internal static readonly bool OracleRequested = Requested && IsRequested(Environment.GetEnvironmentVariable("UNOFFICIAL_PATCH_BEAM_FROZEN_ORACLE"));
 
     private static int _ready;
     private static bool _attempted;
@@ -64,7 +65,6 @@ internal static class BeamFrozen
         _attempted = true;
         try
         {
-            if (BeamParallel.Requested) throw new NotSupportedException("UNOFFICIAL_PATCH_BEAM_FROZEN and UNOFFICIAL_PATCH_BEAM_PARALLEL are mutually exclusive");
             Director director = App.Director ?? throw new NotSupportedException("Beam frozen requires the native Director");
             BeamParallel.ValidateNative(); // file SHA, MVIDs and IL of every mirrored native method (DoEmitBeam, GetHitInfo, bucket loop, ...)
             Patches? info = Harmony.GetPatchInfo(BeamParallel.BucketTarget);
