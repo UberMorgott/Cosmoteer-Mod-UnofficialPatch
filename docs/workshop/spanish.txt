@@ -1,44 +1,64 @@
 Unofficial Patch
 [h1]Unofficial Patch[/h1]
-[i]Correcciones de la comunidad contra los tirones y las desincronizaciones multijugador del Cosmoteer original.[/i]
+[i]Arreglos de la comunidad para Cosmoteer vanilla: más FPS y velocidad de simulación en batallas grandes, menos tirones, menos desincronizaciones en multijugador. Naves, piezas, equilibrio y gráficos siguen siendo vanilla.[/i]
+[b]Requiere [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].[/b] En multijugador todos necesitan la misma versión.
+[b]Mod completo vs vanilla[/b], batalla de 40 naves (capturas): x1 18.4 → 28.9 FPS, 12.9 → 17.5 ticks/s; x8 7.6 → 21.2 FPS, frame p99 276 → 133 ms; basura de memoria -65%.
 
-Una colección creciente de correcciones para fallos del juego base. Cada corrección toca solo el código defectuoso: naves, piezas, equilibrio y gráficos siguen siendo los originales.
-
-[h2]Imagen más fluida: menos tirones por recolección de basura[/h2]
-El juego se detiene un instante con frecuencia para liberar memoria (recolección de basura). Cuantos más objetos de vida corta crea, más a menudo ocurre. Este mod elimina varias de las mayores fuentes:
+[h2]Rendimiento, mayor mejora primero[/h2]
+Antes → después, benchmark de batalla con 40 naves, cada cambio medido por separado en un PC de desarrollo cargado (Ryzen 7 9800X3D): aproximado. {NAME} = interruptor de apagado.
 [list]
-[*][b]Piezas de nave:[/b] las piezas con puertos de red, interruptores y proveedores de estadísticas creaban un objeto nuevo en cada fotograma. Ahora se crea una sola vez por pieza.
-[*][b]Música de fondo:[/b] las capas de música silenciadas se decodificaban todo el rato aunque nadie las oye. Ahora solo se decodifican cuando realmente suenan; el audio es idéntico bit a bit.
-[*][b]Partículas:[/b] cada comprobación de una partícula contra la vista del minimapa creaba un pequeño objeto, y en las grandes batallas se acumulaban. Ahora no se crea ninguno; aparecen las mismas partículas.
-[*][b]Propulsores:[/b] el cálculo de aceleración de la nave construía y desechaba una tabla temporal. Los resultados son idénticos bit a bit.
-[*][b]Mapa galáctico:[/b] las etiquetas de los nodos se reconstruían en cada fotograma. Ahora su texto se guarda en caché.
+[*][b]Interruptores de plano[/b] se revisaban en cada pieza cada frame; ahora solo tras un cambio. Vista cercana 152 → 552 FPS, lejana 31.6 → 44.3, lejana x8 21.2 → 23.9. {BLUEPRINT_TOGGLE_SKIP}
+[*][b]Presupuesto de ticks adaptativo[/b] (un jugador, x2-x8): el juego metía hasta 8 ticks en cada frame; ahora solo los que caben, así que el juego va por debajo de la velocidad elegida en lugar de congelarse. x8: 7.7 → 17.6 FPS, frame p99 363 → 148 ms. {TICK_BUDGET}
+[*][b]Brillos de calor[/b] se recoloreaban con cada cambio mínimo (~19,000 sprites por frame); ahora solo por paso de color de 1/255. Flota en movimiento 60.5 → 127.3 FPS, p99 36.4 → 21.3 ms. {GLOW_QUANTIZE}
+[*][b]Subidas de sprites:[/b] un sprite cambiado reenviaba una capa entera de la nave a la GPU; ahora solo los rangos cambiados. Lejana 44.8 → 65.0 FPS, lejana x8 23.3 → 26.7 FPS y 148 → 187 ticks/s. {ATLAS_RANGE_UPLOAD}
+[*][b]Hilos auxiliares inactivos[/b] giraban sin parar esperando trabajo; ahora duermen y despiertan al instante. CPU 308 → 114 ms por tick, ticks/s +5.4% (100 naves: 503 → 196 ms, +5.7%). {IDLE_PARK}
+[*][b]Valores de efectos estabilizados[/b] (~92%) se revisaban cada frame; ahora reposan hasta que cambian. Vista cercana 441 → 542 FPS, p99 15.0 → 6.7 ms. {SMOOTHED_ACTIVE_SET}
+[*][b]Tiempo de colisión (TOI):[/b] cada pasada revisaba los ~4,900 contactos en un solo núcleo; ahora todos los núcleos, y las pasadas siguientes solo los ~300 que cambiaron. Su tiempo en el hilo principal -72%, CPU 116 → 104 ms/tick. {TOI_SCAN} {TOI_INCREMENTAL}
+[*][b]Contorno del casco[/b] se reconstruía tras cualquier pieza destruida; ahora se conserva cuando no puede cambiar, vecinos leídos de una cuadrícula. CPU del casco -32%. {HULL_REMOVAL_SKIP} {BOUNDING_POINTS}
+[*][b]Eliminación de la lista de escena[/b] comparaba miles de objetos uno a uno (~9% del hilo principal); ahora por referencia. {SCENE_BUCKET_REMOVE}
+[*][b]Rayos[/b] comprobaban cientos de piezas de su propia nave que nunca pueden alcanzar; omitido. Hilo principal 16.1 → 15.5 ms/tick. {BEAM_OWN_SKIP}
+[*][b]Actualización de construcción[/b] se ejecutaba por cada pieza destruida sin nada en cola (~1.1 ms/tick); omitida. {CONSTRUCTION_FLOOD_SKIP}
+[*][b]Calcomanías de separación[/b] buscadas por nombre (~0.5 ms/tick); ahora una tabla. {DECAL_LOOKUP}
 [/list]
-[BENCH RESULTS]
+Cambios de ticks juntos a x8: 20.7 → 22.6 ticks/s, picos de frame 52 → 30 por minuto.
 
-[h2]Multijugador: menos desincronizaciones[/h2]
-Durante la actualización paralela de las naves, el juego modificaba algunos valores compartidos desde dos hilos a la vez, así que un cambio podía perderse o aplicarse en otro orden en algunos clientes. Ahora esos cambios se ponen en cola y se aplican justo después de la actualización, en un orden fijo:
+[h2]Menos basura, menos tirones de GC[/h2]
+Basura eliminada:
 [list]
-[*][b]Dinero del jugador[/b], cuando dos de tus naves comercian con estaciones (o reciben el reembolso de recursos comprados por adelantado) al mismo tiempo.
-[*][b]Misiones de entrega de las estaciones[/b], cuando dos naves comercian con la misma estación al mismo tiempo.
-[*][b]Tripulación trabajando en una tarea de otra nave[/b] (mover recursos entre tus propias naves, ayudar a construir otra nave).
+[*]Delegados de interruptores de piezas: ~430 MB por 20 s. Etiquetas del mapa galáctico: ~200 MB/20 s. Decodificación de música silenciada: ~190 MB/20 s (sonido idéntico bit a bit). Tabla de propulsores: ~140 MB/20 s. Partículas del minimapa: ~60 MB/20 s.
+[*]Comprobaciones de nebulosa sin nebulosa: ~136 MB por 3,000 ticks. {NEBULA_TEMPLIST}
+[*]Listas de oyentes reconstruidas por cada pieza destruida, sonido o separación: ~58 + 52 + 26 + 20 MB por batalla de 40 s. {DESTROYING_BODY_SUBSCRIBERS} {ZOOM_SUBSCRIBERS} {SOUND_STOP_HUB} {SPLIT_ALLOC}
+[*]Boxing de valores de shader: basura por frame -86%, pausas de GC -59% (partida avanzada).
+[*]Los efectos de estado perdían colecciones temporales cada tick: pausa de GC -4.6%. {STATUS_TEMP_DISPOSE}
+[*]Búsqueda de techo bajo el cursor con la tecla de ocultar techos suelta; los puertos de plano usan una ruta de interruptor directa.
 [/list]
-Esto corrige errores concretos. Las desincronizaciones con otras causas aún pueden ocurrir.
 
-[h2]Requisito: Yet Another Mod Loader[/h2]
-Las correcciones funcionan en una biblioteca de C# y necesitan [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].
+[h2]Correcciones de errores[/h2]
+[list]
+[*][b]Desincronizaciones en multijugador:[/b] el dinero del jugador, las misiones de entrega de estaciones y la tripulación en la tarea de otra nave se cambiaban desde dos hilos a la vez. Ahora se encolan y se aplican en un orden fijo.
+[*]La mezcla de color [b]RGB Max[/b] usaba el mínimo y daba colores inválidos.
+[*]Resumen de red (congelaciones, margen de entrada, ping) en el log del mod cada 10 s.
+[/list]
+
+[h2]Opcional, desactivado por defecto[/h2]
+[list]
+[*][b]UNOFFICIAL_PATCH_SP_CATCHUP=1[/b] (un jugador): recupera el tiempo perdido en frames lentos, mantiene x8 completo (242 vs 235 ticks/s) a cambio de algunos FPS.
+[*][b]UNOFFICIAL_PATCH_BEAM_PARALLEL=1[/b]: comprobaciones de impacto de rayos en todos los núcleos, resultados exactos; aún sin mejora medida.
+[*][b]UNOFFICIAL_PATCH_BEAM_FROZEN=1[/b] (un jugador): ticks de combate ~11% más rápidos, pero el combate puede diferir del vanilla.
+[*][b]GC de servidor:[/b] archivo vacío [b]unofficial-patch-server-gc.txt[/b] junto a Saved Ships, inicia el juego, reinicia (bórralo para deshacer). Frame p99 -18%, peor frame +33%, más RAM.
+[/list]
+En investigación: simulación en su propio hilo.
+
+[h2]Seguridad[/h2]
+[list]
+[*]Los cambios de simulación mantienen idéntico el hash de multijugador del propio juego con cada cambio activado y desactivado (3,000 ticks de combate, 10 configuraciones CPU/JIT, partida LAN).
+[*]Interruptor de apagado: variable de entorno UNOFFICIAL_PATCH_{NAME}=0, reiniciar.
+[*]Una actualización del juego que cambie el código parcheado desactiva el mod: se ejecuta vanilla.
+[*]Seguro de quitar: sin piezas, sin datos de guardado.
+[/list]
+
+[h2]Instalación[/h2]
 [olist]
-[*]Suscríbete al cargador y espera a que se descargue.
-[*]Cierra el juego. Abre [b]<Steam>\steamapps\workshop\content\799600\3577650065[/b] y ejecuta [b]Installer.bat[/b].
-[*]Inicia el juego, activa Unofficial Patch en la lista de mods, confía en su biblioteca (DLL) cuando se te pida y reinicia.
-[*]Tras cada actualización de este mod, vuelve a confiar en la biblioteca.
+[*]Suscríbete al loader, cierra el juego, ejecuta [b]Installer.bat[/b] en <Steam>\steamapps\workshop\content\799600\3577650065.
+[*]Activa Unofficial Patch en Mods, confía en su DLL, reinicia. Vuelve a confiar tras cada actualización.
 [/olist]
-
-[h2]Multijugador y desinstalación[/h2]
-[list]
-[*]Todos los jugadores necesitan el mod, en la misma versión, con el mismo cargador y la misma versión del juego.
-[*]Si una actualización del juego cambia el código parcheado, el mod se desactiva solo y el juego funciona como el original.
-[*]Se puede quitar sin riesgo: no añade piezas ni guarda datos propios.
-[/list]
-
-[h2]Experimental: GC de servidor (desactivado por defecto)[/h2]
-Cambia .NET a su recolector de basura de servidor. En nuestras pruebas: pausas de GC menos frecuentes y más cortas (p99 de fotogramas -18 %), pero más tirones cortos y un peor fotograma más lento (+33 %). Activar: crea un archivo vacío [b]unofficial-patch-server-gc.txt[/b] en la carpeta Cosmoteer de Saved Games (junto a Saved Ships), inicia el juego una vez y reinícialo. Desactivar: borra el archivo, inicia una vez y reinicia. "Verificar la integridad de los archivos" de Steam también lo desactiva.

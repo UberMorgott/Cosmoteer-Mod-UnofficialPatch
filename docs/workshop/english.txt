@@ -1,44 +1,64 @@
 Unofficial Patch
 [h1]Unofficial Patch[/h1]
-[i]Community fixes for stutter and multiplayer desyncs in vanilla Cosmoteer.[/i]
+[i]Community fixes for vanilla Cosmoteer: higher FPS and simulation speed in big battles, less stutter, fewer multiplayer desyncs. Ships, parts, balance and visuals stay vanilla.[/i]
+[b]Requires [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].[/b] In multiplayer everyone needs the same version.
+[b]Whole mod vs vanilla[/b], 40-ship battle (screenshots): x1 18.4 → 28.9 FPS, 12.9 → 17.5 ticks/s; x8 7.6 → 21.2 FPS, frame p99 276 → 133 ms; garbage -65%.
 
-A growing collection of fixes for problems in the base game. Each fix changes only the faulty code path: ships, parts, balance and visuals stay vanilla.
-
-[h2]Smoother frames: less garbage-collection stutter[/h2]
-The game regularly pauses for a moment to clean up memory (garbage collection). The more short-lived objects it creates, the more often this happens. This mod removes several of the biggest sources:
+[h2]Performance, biggest gain first[/h2]
+Before → after, 40-ship battle benchmark, each change measured alone on a busy dev PC (Ryzen 7 9800X3D): approximate. {NAME} = kill switch.
 [list]
-[*][b]Ship parts:[/b] parts with network ports, toggles and stat providers created a new object every frame. Now created once per part.
-[*][b]Background music:[/b] muted music layers were decoded all the time although nobody hears them. They are now only decoded when actually played; the sound is bit-identical.
-[*][b]Particles:[/b] every particle check against the minimap view created a small object, adding up in big battles. The check now creates none; the same particles appear.
-[*][b]Thrusters:[/b] the ship acceleration calculation built and threw away a temporary table. Results are bit-identical.
-[*][b]Galaxy map:[/b] node labels were rebuilt every frame. Their text is now cached.
+[*][b]Blueprint toggles[/b] re-checked on every part every frame; now only after a change. Close view 152 → 552 FPS, far 31.6 → 44.3, far x8 21.2 → 23.9. {BLUEPRINT_TOGGLE_SKIP}
+[*][b]Adaptive tick budget[/b] (single player, x2-x8): the game crammed up to 8 ticks into each frame; now only the ticks that fit, so the game runs below the chosen speed instead of freezing. x8: 7.7 → 17.6 FPS, frame p99 363 → 148 ms. {TICK_BUDGET}
+[*][b]Heat glows[/b] recoloured on every tiny change (~19,000 sprites per frame); now only per 1/255 colour step. Moving fleet 60.5 → 127.3 FPS, p99 36.4 → 21.3 ms. {GLOW_QUANTIZE}
+[*][b]Sprite uploads:[/b] one changed sprite re-sent a whole ship layer to the GPU; now only changed ranges. Far 44.8 → 65.0 FPS, far x8 23.3 → 26.7 FPS and 148 → 187 ticks/s. {ATLAS_RANGE_UPLOAD}
+[*][b]Idle helper threads[/b] spun nonstop waiting for work; now they sleep and wake instantly. CPU 308 → 114 ms per tick, ticks/s +5.4% (100 ships: 503 → 196 ms, +5.7%). {IDLE_PARK}
+[*][b]Settled effect values[/b] (~92%) re-checked every frame; now they rest until changed. Close view 441 → 542 FPS, p99 15.0 → 6.7 ms. {SMOOTHED_ACTIVE_SET}
+[*][b]Collision timing (TOI):[/b] every pass re-checked all ~4,900 contacts on one core; now all cores, later passes only the ~300 that changed. Its main-thread time -72%, CPU 116 → 104 ms/tick. {TOI_SCAN} {TOI_INCREMENTAL}
+[*][b]Hull outline[/b] rebuilt after any destroyed part; now kept when it cannot change, neighbours read from a grid. Hull CPU -32%. {HULL_REMOVAL_SKIP} {BOUNDING_POINTS}
+[*][b]Scene list removal[/b] compared thousands of objects one by one (~9% of the main thread); now by reference. {SCENE_BUCKET_REMOVE}
+[*][b]Beams[/b] tested hundreds of their own ship's parts they can never hit; skipped. Main thread 16.1 → 15.5 ms/tick. {BEAM_OWN_SKIP}
+[*][b]Construction refresh[/b] ran per destroyed part with nothing queued (~1.1 ms/tick); skipped. {CONSTRUCTION_FLOOD_SKIP}
+[*][b]Split decals[/b] looked up by name (~0.5 ms/tick); now a table. {DECAL_LOOKUP}
 [/list]
-[BENCH RESULTS]
+Tick changes together at x8: 20.7 → 22.6 ticks/s, frame spikes 52 → 30 per minute.
 
-[h2]Multiplayer: fewer desyncs[/h2]
-During the parallel ship update the game changed some shared values from two threads at once, so one change could be lost or applied in a different order on some clients. These changes are now queued and applied right after the update, in a fixed order:
+[h2]Less garbage, less GC stutter[/h2]
+Garbage removed:
 [list]
-[*][b]Player money[/b] when two of your ships trade with stations (or get pre-purchased resources refunded) at the same moment.
-[*][b]Station delivery missions[/b] when two ships trade with the same station at the same moment.
-[*][b]Crew working on another ship's job[/b] (moving resources between your own ships, helping build another ship).
+[*]Part toggle delegates: ~430 MB per 20 s. Galaxy map labels: ~200 MB/20 s. Muted music decoding: ~190 MB/20 s (sound bit-identical). Thruster table: ~140 MB/20 s. Minimap particles: ~60 MB/20 s.
+[*]Nebula checks with no nebula: ~136 MB per 3,000 ticks. {NEBULA_TEMPLIST}
+[*]Listener lists rebuilt per destroyed part, sound or split: ~58 + 52 + 26 + 20 MB per 40 s battle. {DESTROYING_BODY_SUBSCRIBERS} {ZOOM_SUBSCRIBERS} {SOUND_STOP_HUB} {SPLIT_ALLOC}
+[*]Shader value boxing: garbage per frame -86%, GC pauses -59% (late save).
+[*]Status effects leaked temp collections every tick: GC pause -4.6%. {STATUS_TEMP_DISPOSE}
+[*]Roof hover search with the hide-roof key up; blueprint ports use a direct toggle path.
 [/list]
-These fix specific bugs. Desyncs with other causes can still happen.
 
-[h2]Required: Yet Another Mod Loader[/h2]
-The fixes run in a C# library and need [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3577650065]Yet Another Mod Loader[/url].
+[h2]Bug fixes[/h2]
+[list]
+[*][b]Multiplayer desyncs:[/b] player money, station delivery missions and crew on another ship's job were changed from two threads at once. Now queued and applied in a fixed order.
+[*][b]RGB Max[/b] colour blend used minimum and gave invalid colours.
+[*]Network summary (freezes, input margin, ping) in the mod log every 10 s.
+[/list]
+
+[h2]Optional, off by default[/h2]
+[list]
+[*][b]UNOFFICIAL_PATCH_SP_CATCHUP=1[/b] (single player): keeps time lost to slow frames, holds full x8 (242 vs 235 ticks/s) for some FPS.
+[*][b]UNOFFICIAL_PATCH_BEAM_PARALLEL=1[/b]: beam hit checks on all cores, exact results; no measured gain yet.
+[*][b]UNOFFICIAL_PATCH_BEAM_FROZEN=1[/b] (single player): ~11% faster combat ticks, but combat can differ from vanilla.
+[*][b]Server GC:[/b] empty file [b]unofficial-patch-server-gc.txt[/b] next to Saved Ships, start the game, restart (delete it to undo). Frame p99 -18%, worst frame +33%, more RAM.
+[/list]
+In research: simulation on its own thread.
+
+[h2]Safety[/h2]
+[list]
+[*]Simulation changes keep the game's own multiplayer hash identical with each change on and off (3,000 combat ticks, 10 CPU/JIT setups, LAN game).
+[*]Kill switch: environment variable UNOFFICIAL_PATCH_{NAME}=0, restart.
+[*]A game update that changes patched code turns the mod off: vanilla runs.
+[*]Safe to remove: no parts, no save data.
+[/list]
+
+[h2]Install[/h2]
 [olist]
-[*]Subscribe to the loader and wait for the download.
-[*]Close the game. Open [b]<Steam>\steamapps\workshop\content\799600\3577650065[/b] and run [b]Installer.bat[/b].
-[*]Start the game, enable Unofficial Patch in the Mods list, trust its library (DLL) when asked, and restart.
-[*]After every update of this mod, trust the library again.
+[*]Subscribe to the loader, close the game, run [b]Installer.bat[/b] in <Steam>\steamapps\workshop\content\799600\3577650065.
+[*]Enable Unofficial Patch in Mods, trust its DLL, restart. Trust it again after every update.
 [/olist]
-
-[h2]Multiplayer and removal[/h2]
-[list]
-[*]All players need the mod, in the same version, with the same loader and game version.
-[*]If a game update changes the patched code, the mod switches itself off and the game runs vanilla.
-[*]Safe to remove: it adds no parts and saves nothing of its own.
-[/list]
-
-[h2]Experimental: Server GC (off by default)[/h2]
-Switches .NET to its server garbage collector. In our tests: fewer and shorter GC pauses (frame p99 -18%), but more short spikes and a worse worst frame (+33%). To enable: create an empty file [b]unofficial-patch-server-gc.txt[/b] in the Cosmoteer folder in Saved Games (next to Saved Ships), start the game once, then restart. To disable: delete the file, start once, restart. Steam "Verify integrity of game files" also turns it off.
