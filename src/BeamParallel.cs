@@ -269,43 +269,53 @@ internal static class BeamParallel
     }
     private static readonly Dictionary<MethodBase, byte[]>? HarmonyState =
         AccessTools.Field(typeof(Harmony).Assembly.GetType("HarmonyLib.HarmonySharedState"), "state")?.GetValue(null) as Dictionary<MethodBase, byte[]>;
-    private static MethodBase[] _checkedKeys = [];
-    private static byte[][] _checkedValues = [];
-    private static int _checkedCount = -1;
+    private static readonly HarmonySnapshot Snapshot = new();
     /// <summary>
-    /// True only when Harmony's shared state holds exactly the method and patch-info array references seen at the last
-    /// successful full check, in the same order. Every patch, unpatch or retarget stores a new serialized array
-    /// (HarmonySharedState.UpdatePatchInfo), so any change fails the reference comparison. Compared under Harmony's own lock;
-    /// allocation-free. An unreadable state never matches (the full check then runs every frame).
+    /// Harmony's shared state (method -&gt; serialized patch info) as last seen by one consumer. Every patch, unpatch or
+    /// retarget stores a new serialized array (HarmonySharedState.UpdatePatchInfo), so any change fails the reference
+    /// comparison. Compared under Harmony's own lock; allocation-free. An unreadable state never matches.
     /// </summary>
-    internal static bool HarmonyStateUnchanged()
+    internal sealed class HarmonySnapshot
     {
-        Dictionary<MethodBase, byte[]>? state = HarmonyState;
-        if (state == null) return false;
-        lock (state)
+        private MethodBase[] _keys = [];
+        private byte[][] _values = [];
+        private int _count = -1;
+
+        internal void Reset() => _count = -1;
+
+        /// <summary>True only when the state holds exactly the method and patch-info array references seen at <see cref="Remember"/>, in order.</summary>
+        internal bool Unchanged()
         {
-            if (state.Count != _checkedCount) return false;
-            int i = 0;
-            foreach (KeyValuePair<MethodBase, byte[]> entry in state)
+            Dictionary<MethodBase, byte[]>? state = HarmonyState;
+            if (state == null) return false;
+            lock (state)
             {
-                if (!ReferenceEquals(entry.Key, _checkedKeys[i]) || !ReferenceEquals(entry.Value, _checkedValues[i])) return false;
-                i++;
+                if (state.Count != _count) return false;
+                int i = 0;
+                foreach (KeyValuePair<MethodBase, byte[]> entry in state)
+                {
+                    if (!ReferenceEquals(entry.Key, _keys[i]) || !ReferenceEquals(entry.Value, _values[i])) return false;
+                    i++;
+                }
+                return true;
             }
-            return true;
         }
-    }
-    internal static void RememberHarmonyState()
-    {
-        Dictionary<MethodBase, byte[]>? state = HarmonyState;
-        if (state == null) return;
-        lock (state)
+
+        internal void Remember()
         {
-            if (_checkedKeys.Length < state.Count) { _checkedKeys = new MethodBase[state.Count * 2]; _checkedValues = new byte[state.Count * 2][]; }
-            int i = 0;
-            foreach (KeyValuePair<MethodBase, byte[]> entry in state) { _checkedKeys[i] = entry.Key; _checkedValues[i] = entry.Value; i++; }
-            _checkedCount = state.Count;
+            Dictionary<MethodBase, byte[]>? state = HarmonyState;
+            if (state == null) return;
+            lock (state)
+            {
+                if (_keys.Length < state.Count) { _keys = new MethodBase[state.Count * 2]; _values = new byte[state.Count * 2][]; }
+                int i = 0;
+                foreach (KeyValuePair<MethodBase, byte[]> entry in state) { _keys[i] = entry.Key; _values[i] = entry.Value; i++; }
+                _count = state.Count;
+            }
         }
     }
+    internal static bool HarmonyStateUnchanged() => Snapshot.Unchanged();
+    internal static void RememberHarmonyState() => Snapshot.Remember();
     internal static void CheckCompatibility()
     {
         if (!Ready || HarmonyStateUnchanged()) return; // no patch changed since the last full check
@@ -314,9 +324,9 @@ internal static class BeamParallel
             // Remembered before the full check: a patch landing during it fails the next comparison and re-runs the check.
             RememberHarmonyState();
             ValidateHookCoverage();
-            if (!Compatible(out string? error)) { _checkedCount = -1; Reject(error ?? "Beam parallel compatibility unavailable"); }
+            if (!Compatible(out string? error)) { Snapshot.Reset(); Reject(error ?? "Beam parallel compatibility unavailable"); }
         }
-        catch (Exception ex) { _checkedCount = -1; Reject(ex.Message); }
+        catch (Exception ex) { Snapshot.Reset(); Reject(ex.Message); }
     }
     private static void OnFrameStarting(object? sender, EventArgs e)
     {

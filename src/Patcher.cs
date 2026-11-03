@@ -40,6 +40,7 @@ internal static class Patcher
         .. BeamTargetMemo.Patches,
         .. BeamParallel.Patches,
         .. BeamFrozen.Patches,
+        .. BeamOwnBodySkip.Patches,
         (ThrusterAccelerationCache.Target, typeof(ThrusterAccelerationCache)),
         (MapNodeText.Target, typeof(MapNodeText)),
         (MusicSeek.Target, typeof(MusicSeek)),
@@ -110,6 +111,7 @@ internal static class Patcher
             if (BeamTargetMemo.Requested) _ = BeamTargetMemo.Initialize();
             if (BeamParallel.Requested) _ = BeamParallel.Initialize();
             if (BeamFrozen.Requested) _ = BeamFrozen.Initialize();
+            if (BeamOwnBodySkip.Requested) _ = BeamOwnBodySkip.Initialize();
             if (GlowQuantize.Requested) _ = GlowQuantize.Initialize();
             if (SceneBucketRemove.Requested) SceneBucketRemove.Initialize();
             // Diagnostic getter guards: installed apart from Patches (no R2R inliner rejit, skip instead of rollback).
@@ -138,6 +140,7 @@ internal static class Patcher
         BeamTargetMemo.Disable();
         BeamParallel.Disable();
         BeamFrozen.Disable();
+        BeamOwnBodySkip.Disable();
         RaycastScratch.Disable();
         CullCadence.Disable();
         ParallelIdleParking.Disable();

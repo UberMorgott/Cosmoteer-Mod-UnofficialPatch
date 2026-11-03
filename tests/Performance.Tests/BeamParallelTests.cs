@@ -445,6 +445,51 @@ public sealed class BeamParallelTests
         Assert.Contains(BeamParallel.Stats.Reasons.Keys, k => k == "replay native: input offset draw");
     }
 
+    [Theory]
+    [InlineData("own", true)]
+    [InlineData("own-shield", true)]
+    [InlineData("own-accept-parts", true)] // own operational cells accepted: only the structural ray (Cat3, rejected by PenetratesStructure) skips
+    [InlineData("own-secondary-self", true)] // own ship passes the secondary filter: only the structural ray skips
+    [InlineData("own-accept-shield", true)] // own shield accepted by ShieldCollisions: only the secondary ray skips
+    [InlineData("secondary", false)]
+    public void OwnBodySkipMatchesNative(string scenario, bool skips)
+    {
+        var harmony = new Harmony("Performance.Tests.BeamOwnBodySkip");
+        try
+        {
+            using var f = new Setup(scenario, beams: 4);
+            var rands = new List<(ulong, ulong)>();
+            var natives = Enumerable.Range(0, 4).Select(i => { HitInfo n = f.Native(i); rands.Add(f.RandAfterNative); return n; }).ToList();
+            foreach ((MethodBase target, Type patch) in BeamOwnBodySkip.Targets)
+            {
+                HarmonyMethod? Hook(string name) => patch.GetMethod(name, BindingFlags.Public | BindingFlags.Static) is { } m ? new HarmonyMethod(m) : null;
+                harmony.Patch(target, Hook("Prefix"), Hook("Postfix"), finalizer: Hook("Finalizer"));
+            }
+            BeamOwnBodySkip.SetReadyForTests(true);
+            long skipsBefore = BeamOwnBodySkip.Skips;
+            for (int i = 0; i < 4; i++)
+            {
+                HitInfo patched = f.Native(i);
+                try
+                {
+                    Assert.Null(BeamParallel.Difference(natives[i], patched));
+                    Assert.Equal(rands[i], f.RandAfterNative);
+                }
+                finally { patched.Dispose(); }
+            }
+            Assert.Equal(skips, BeamOwnBodySkip.Skips > skipsBefore);
+            if (scenario.StartsWith("own", StringComparison.Ordinal) && scenario is not ("own-accept-parts" or "own-secondary-self"))
+                Assert.True(natives.Any(n => n.Operational.Hit.Part != null || n.Structural.Part != null || n.Operational.Hit.Shield != null), "beams must reach a hit");
+            if (scenario is "own-accept-parts" or "own-secondary-self") Assert.Contains(natives, n => n.Length < 50f); // clipped by an own cell: the walk that must not be skipped
+            natives.ForEach(n => n.Dispose());
+        }
+        finally
+        {
+            BeamOwnBodySkip.SetReadyForTests(false);
+            harmony.UnpatchAll(harmony.Id);
+        }
+    }
+
     [Fact]
     public void PatchedReplayPipelineMatchesNative()
     {
@@ -701,6 +746,7 @@ public sealed class BeamParallelTests
                 Managers.Add(manager);
             }
             BuildTargets();
+            if (IsOwn) BuildOwn();
             World.ProcessChanges();
         }
 
@@ -741,7 +787,9 @@ public sealed class BeamParallelTests
             else Set(rules, "CrewCollisions", Filter(EffectFilter.Defaults.CollisionsOff));
             Set(rules, "AttenuatorCollisions", Filter(EffectFilter.Defaults.Enemy));
             foreach (string flag in new[] { "FriendlyShipLowCollisions", "FriendlyShipHighCollisions", "NonFriendlyShipLowCollisions", "NonFriendlyShipHighCollisions" })
-                Set(rules, flag, true);
+                Set(rules, flag, !(IsOwn && _scenario is not ("own-accept-parts" or "own-secondary-self") && flag.StartsWith("Friendly", StringComparison.Ordinal)));
+            if (_scenario == "own-secondary-self") { var secondary = Filter(EffectFilter.Defaults.Enemy); secondary.Self = true; secondary.Friendlies = true; Set(rules, "SecondaryFilter", secondary); }
+            if (_scenario == "own-accept-shield") { var shields = Filter(EffectFilter.Defaults.Enemy); shields.Self = true; shields.Friendlies = true; Set(rules, "ShieldCollisions", shields); }
             Set(rules, "PenetratesStructure", _scenario != "structural-blocking");
             Set(rules, "KeepLengthWhenHitNothing", _scenario == "keep-length");
             Set(rules, "AntiPhasingRaycastDistance", _scenario == "anti-phasing" ? 3f : 0f);
@@ -754,7 +802,7 @@ public sealed class BeamParallelTests
                 var min = Shell<ModifiableFloat>(); min.BaseValue = 2f; var max = Shell<ModifiableFloat>(); max.BaseValue = 4f;
                 Set(rules, "RandomOffsetRadius", new Halfling.Range<ModifiableFloat>(min, max));
             }
-            if (_scenario is "secondary" or "crew-secondary")
+            if (_scenario is "secondary" or "crew-secondary" || IsOwn)
             {
                 var width = Shell<ModifiableFloat>(); width.BaseValue = 6f; Set(rules, "SecondaryWidth", width);
             }
@@ -837,6 +885,30 @@ public sealed class BeamParallelTests
         internal ArcShield? Shield;
         internal SpaceCrew? Crew;
         private bool IsCrew => _scenario.StartsWith("crew", StringComparison.Ordinal);
+        private bool IsOwn => _scenario.StartsWith("own", StringComparison.Ordinal);
+
+        /// <summary>
+        /// Own-ship fixtures around the emitters (whole-body broad phase): structural low cells behind and beside the beam
+        /// start, operational high cells in front of it, and (own-shield scenarios) an own arc shield over the start.
+        /// </summary>
+        internal void BuildOwn()
+        {
+            Body body = Source.Physics.Body!;
+            body.UseWholeBodyBroadPhase = true;
+            void Rect(int left, int top, int width, int height, Category category)
+            {
+                Fixture fixture = body.CreateRectangle(width, height, 1f, new System.Numerics.Vector2(left + width / 2f, top + height / 2f));
+                fixture.CollisionCategories = category;
+                fixture.UserData = new ShipPhysics.CellsFixtureInfo(new IntRect(left, top, width, height), 1f, fixture);
+            }
+            Rect(-12, -6, 12, 30, Category.Cat1 | Category.Cat3 | Category.Cat4);
+            Rect(2, -6, 2, 30, Category.Cat1 | Category.Cat2 | Category.Cat5);
+            Rect(5, -6, 1, 30, Category.Cat1 | Category.Cat3 | Category.Cat5);
+            Rect(-14, -6, 2, 30, Category.Cat1); // outside every beam filter: IsShipHitValid would accept it, but no walk visits it
+            if (_scenario is "own-shield" or "own-accept-shield") AddShield(Source, body, warm: true, at: new IntVector2(-2, 1));
+            if (_scenario == "own-secondary-self") // real own parts under the cells, so the secondary part filter can accept them
+                for (int y = -6; y < 24; y++) { AddPart(Source, new IntVector2(2, y), HealthType.Operational); AddPart(Source, new IntVector2(3, y), HealthType.Operational); }
+        }
 
         /// <summary>A flying crew as SpaceCrew.CreateBody builds it (SpaceCrew.cs:1123-1137): body and fixture user data, Cat10.</summary>
         private void AddCrew(V location, float radius, Ship? home, int player, bool foreign = false)
@@ -855,10 +927,10 @@ public sealed class BeamParallelTests
         }
 
         /// <summary>A full-circle arc shield in front of the target, centred on its part component location.</summary>
-        private void AddShield(Ship target, Body body, bool warm)
+        private void AddShield(Ship target, Body body, bool warm, IntVector2? at = null)
         {
             var rules = Shell<PartRules>(); rules.Size = new IntVector2(1, 1); Set(rules, "HealthType", HealthType.Operational); Set(rules, "TypeCategories", new HashSet<ID<PartCategory>>());
-            var part = Shell<Part>(); Set(part, "<Rules>k__BackingField", rules); Set(part, "p_ship", target); Set(part, "<Location>k__BackingField", new IntVector2(-8, 12));
+            var part = Shell<Part>(); Set(part, "<Rules>k__BackingField", rules); Set(part, "p_ship", target); Set(part, "<Location>k__BackingField", at ?? new IntVector2(-8, 12));
             Set(part, "_components", new List<PartComponent>());
             var shield = Shell<ArcShield>(); Set(shield, "<Part>k__BackingField", part); Set(shield, "<IsOperational>k__BackingField", true);
             Set(shield, "<RulesLocation>k__BackingField", new V(0.5f, 0.5f)); Set(shield, "<RulesRotation>k__BackingField", (Direction)MathF.PI);
