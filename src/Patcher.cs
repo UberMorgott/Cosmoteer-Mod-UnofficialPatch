@@ -54,6 +54,7 @@ internal static class Patcher
         .. BoundingPoints.Patches,
         .. HullRemovalSkip.Patches,
         .. DecalLookup.Patches,
+        .. SplitAlloc.Patches,
         .. SoundStopHub.Patches,
         .. SceneBucketRemove.Patches,
         .. PhysicsToiScan.Patches,

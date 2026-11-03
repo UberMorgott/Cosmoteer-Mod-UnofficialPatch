@@ -120,7 +120,7 @@ public sealed class SharedGenericRetargetTests
         try
         {
             MethodBase[] shared = PatcherShared();
-            Assert.Equal(2, shared.Length); // BoundingPoints, StatusTempDispose<Part>; update when adding one
+            Assert.Equal(3, shared.Length); // BoundingPoints, StatusTempDispose<Part>, SplitAlloc toggle RemoveAll; update when adding one
             Assert.True(SharedGenericRetarget.Enable(shared, out string? error), error);
             foreach (MethodBase target in shared)
             {
