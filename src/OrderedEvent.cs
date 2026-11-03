@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Performance;
 
@@ -12,11 +13,10 @@ namespace Performance;
 /// </summary>
 internal sealed class OrderedEvent<TOwner> where TOwner : class
 {    /// <summary>Ordered multiset of handlers; the owner's event holds only <see cref="Raise"/>.</summary>
-    private sealed class Subscribers
+    private sealed class Subscribers(OrderedEvent<TOwner> owner)
     {
         internal readonly LinkedList<EventHandler<EventArgs>> Order = new();
-        internal readonly Dictionary<EventHandler<EventArgs>, Stack<LinkedListNode<EventHandler<EventArgs>>>> Nodes = new();
-        internal EventHandler<EventArgs>[] Snapshot = new EventHandler<EventArgs>[64];
+        internal readonly Dictionary<EventHandler<EventArgs>, List<LinkedListNode<EventHandler<EventArgs>>>> Nodes = new();
         internal bool Attached;
 
         internal void Raise(object? sender, EventArgs e)
@@ -26,9 +26,8 @@ internal sealed class OrderedEvent<TOwner> where TOwner : class
             lock (this)
             {
                 n = Order.Count;
-                if (Snapshot.Length < n) Snapshot = new EventHandler<EventArgs>[Math.Max(n, Snapshot.Length * 2)];
-                snapshot = Snapshot;
-                Snapshot = []; // a nested raise allocates its own snapshot
+                // One spare snapshot per event, shared by all owners; a nested or concurrent raise allocates its own.
+                snapshot = Interlocked.Exchange(ref owner._spare, null) is { } spare && spare.Length >= n ? spare : new EventHandler<EventArgs>[Math.Max(n, 16)];
                 Order.CopyTo(snapshot, 0);
             }
             try
@@ -38,10 +37,12 @@ internal sealed class OrderedEvent<TOwner> where TOwner : class
             finally
             {
                 Array.Clear(snapshot, 0, n);
-                lock (this) if (snapshot.Length > Snapshot.Length) Snapshot = snapshot;
+                Volatile.Write(ref owner._spare, snapshot);
             }
         }
     }
+
+    private EventHandler<EventArgs>[]? _spare;
 
     private readonly ConditionalWeakTable<TOwner, Subscribers> _owners = new();
     private readonly Action<TOwner, EventHandler<EventArgs>> _attach;
@@ -52,7 +53,7 @@ internal sealed class OrderedEvent<TOwner> where TOwner : class
     internal void Add(TOwner owner, EventHandler<EventArgs>? handler)
     {
         if (handler == null) return;
-        Subscribers subs = _owners.GetValue(owner, _ => new Subscribers()); // factory may run twice; only the stored one is used
+        Subscribers subs = _owners.GetValue(owner, _ => new Subscribers(this)); // factory may run twice; only the stored one is used
         lock (subs)
         {
             if (!subs.Attached)
@@ -60,21 +61,51 @@ internal sealed class OrderedEvent<TOwner> where TOwner : class
                 subs.Attached = true;
                 _attach(owner, subs.Raise);
             }
-            LinkedListNode<EventHandler<EventArgs>> node = subs.Order.AddLast(handler);
-            if (!subs.Nodes.TryGetValue(handler, out Stack<LinkedListNode<EventHandler<EventArgs>>>? stack)) subs.Nodes[handler] = stack = new();
-            stack.Push(node);
+            if (handler.HasSingleTarget) AddLast(subs, handler);
+            else foreach (Delegate single in handler.GetInvocationList()) AddLast(subs, (EventHandler<EventArgs>)single); // as Delegate.Combine flattens
         }
     }
 
-    /// <summary>owner.Event -= handler: drops the last equal handler, if any (Delegate.Remove semantics).</summary>
+    private static void AddLast(Subscribers subs, EventHandler<EventArgs> handler)
+    {
+        LinkedListNode<EventHandler<EventArgs>> node = subs.Order.AddLast(handler);
+        if (!subs.Nodes.TryGetValue(handler, out List<LinkedListNode<EventHandler<EventArgs>>>? nodes)) subs.Nodes[handler] = nodes = [];
+        nodes.Add(node);
+    }
+
+    private static void Unlink(Subscribers subs, LinkedListNode<EventHandler<EventArgs>> node)
+    {
+        List<LinkedListNode<EventHandler<EventArgs>>> nodes = subs.Nodes[node.Value];
+        nodes.RemoveAt(nodes.LastIndexOf(node));
+        if (nodes.Count == 0) subs.Nodes.Remove(node.Value);
+        subs.Order.Remove(node);
+    }
+
+    /// <summary>
+    /// owner.Event -= handler with Delegate.Remove semantics: drops the last equal handler, or for a multicast handler the
+    /// last contiguous run equal to its invocation list; nothing when there is none.
+    /// </summary>
     internal void Remove(TOwner owner, EventHandler<EventArgs>? handler)
     {
         if (handler == null || !_owners.TryGetValue(owner, out Subscribers? subs)) return;
         lock (subs)
         {
-            if (!subs.Nodes.TryGetValue(handler, out Stack<LinkedListNode<EventHandler<EventArgs>>>? stack)) return;
-            subs.Order.Remove(stack.Pop());
-            if (stack.Count == 0) subs.Nodes.Remove(handler);
+            if (handler.HasSingleTarget)
+            {
+                if (subs.Nodes.TryGetValue(handler, out List<LinkedListNode<EventHandler<EventArgs>>>? nodes)) Unlink(subs, nodes[^1]);
+                return;
+            }
+            Delegate[] run = handler.GetInvocationList(); // rare path: scan for the last matching run
+            for (LinkedListNode<EventHandler<EventArgs>>? end = subs.Order.Last; end != null; end = end.Previous)
+            {
+                LinkedListNode<EventHandler<EventArgs>>? node = end;
+                int i = run.Length - 1;
+                while (i >= 0 && node != null && node.Value.Equals(run[i])) { node = node.Previous; i--; }
+                if (i >= 0) continue;
+                node = end;
+                for (int k = 0; k < run.Length; k++) { LinkedListNode<EventHandler<EventArgs>>? prev = node!.Previous; Unlink(subs, node); node = prev; }
+                return;
+            }
         }
     }
 }
