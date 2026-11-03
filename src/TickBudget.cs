@@ -1,10 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using Cosmoteer;
 using Cosmoteer.Game.Multiplayer;
 using Cosmoteer.Simulation;
 using Halfling;
+using Halfling.Timing;
 using HarmonyLib;
 
 namespace UnofficialPatch;
@@ -20,8 +24,8 @@ namespace UnofficialPatch;
 /// does not runs at most as many ticks per frame as the budget or x1 allow; the time it cannot run is dropped, as
 /// vanilla drops slow-frame time. Ticks, their order and inputs are unchanged; only which frame runs a tick moves.
 /// Speed x1 and below, pause, debug tick step / full throttle and multiplayer (lockstep pacing comes from the host's
-/// input ticks) are untouched. Composes with <see cref="SpCatchUp"/>: catch-up debt never pushes a frame past the cap.
-/// Off: <c>UNOFFICIAL_PATCH_TICK_BUDGET=0</c>.
+/// input ticks) are untouched. The cap is applied where SPManager.Update (SPManager.cs:72) takes the frame's real delta time
+/// from NetManager.GetTargetAdjustedDeltaTime (<see cref="Pacing"/>). Off: <c>UNOFFICIAL_PATCH_TICK_BUDGET=0</c>.
 /// </summary>
 internal static class TickBudget
 {
@@ -37,7 +41,32 @@ internal static class TickBudget
     internal static readonly MethodInfo Target = AccessTools.Method(typeof(SimRoot), "FixedUpdate", Type.EmptyTypes)
         ?? throw new MissingMethodException(nameof(SimRoot), "FixedUpdate");
 
-    internal static (MethodBase Target, Type Patch)[] Patches => Requested ? [(Target, typeof(TickBudget))] : [];
+    internal static (MethodBase Target, Type Patch)[] Patches => Requested ? [(Target, typeof(TickBudget)), (Pacing.Target, typeof(Pacing))] : [];
+
+    /// <summary>Replaces the single <c>call GetTargetAdjustedDeltaTime</c> in SPManager.Update with <c>call DeltaTime(NetManager)</c>.</summary>
+    internal static class Pacing
+    {
+        private const string IlSha256 = "E32E78E0BB0AF25444AC043CA848567671AA6E389A2C7BCC3601E0653E071480";
+
+        internal static readonly MethodInfo Target = AccessTools.Method(typeof(SPManager), nameof(SPManager.Update))
+            ?? throw new MissingMethodException(nameof(SPManager), nameof(SPManager.Update));
+
+        internal static readonly MethodInfo Vanilla = AccessTools.Method(typeof(NetManager), nameof(NetManager.GetTargetAdjustedDeltaTime))
+            ?? throw new MissingMethodException(nameof(NetManager), nameof(NetManager.GetTargetAdjustedDeltaTime));
+
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            List<CodeInstruction> code = Patcher.RequireIl(instructions, IlSha256, "SPManager.Update");
+            CodeInstruction call = code.Single(ci => ci.Calls(Vanilla));
+            call.opcode = OpCodes.Call;
+            call.operand = AccessTools.Method(typeof(Pacing), nameof(DeltaTime));
+            return code;
+        }
+
+        /// <summary>Main thread, once per SP frame, in place of vanilla's call.</summary>
+        internal static Time DeltaTime(NetManager net) =>
+            Limit(net, net.GetTargetAdjustedDeltaTime()); // exactly once: tick step mode reads keys and prints
+    }
 
     // Main thread only. Averages belong to one SimRoot: a new game (or an MP sim) starts from unknown.
     private static readonly WeakReference<SimRoot?> _sim = new(null);
@@ -82,7 +111,7 @@ internal static class TickBudget
     internal static double Average(double avg, double sample) => avg > 0 ? avg + Alpha * (sample - avg) : sample;
 
     /// <summary>Main thread, once per SP frame: caps the real delta time SPManager.Update hands to the sim.</summary>
-    internal static double Limit(NetManager net, double vanilla, double proposed)
+    internal static double Limit(NetManager net, double vanilla)
     {
         if (!_subscribed)
         {
@@ -91,24 +120,24 @@ internal static class TickBudget
             App.Director.FrameEnded += OnFrameEnded;
         }
         Own(net.Sim);
-        if (net.Game.DebugTools is { TickStepMode: true } or { FullThrottle: true }) return proposed;
+        if (net.Game.DebugTools is { TickStepMode: true } or { FullThrottle: true }) return vanilla;
         double frame = 1.0 / (int)Settings.TargetFps;
         if (!(frame > 0) || double.IsInfinity(frame)) frame = 1.0 / 60; // FpsTarget0 = uncapped: budget as for 60
-        return Cap(proposed, vanilla, net.Sim.Clock.ScaleFactor, _tickCost, Budget(frame, _otherCost), 1.0 / net.Sim.Rules.PhysicsUpdatesPerSecond);
+        return Cap(vanilla, net.Sim.Clock.ScaleFactor, _tickCost, Budget(frame, _otherCost), 1.0 / net.Sim.Rules.PhysicsUpdatesPerSecond);
     }
 
     /// <summary>Tick time per frame: the frame left after the non-tick work, at least <see cref="Share"/> of it.</summary>
     internal static double Budget(double frame, double other) => Math.Max(Share * frame, frame - other);
 
     /// <summary>
-    /// Real delta time for this frame: <paramref name="proposed"/>, but its game time (x <paramref name="scale"/>) at most
+    /// Real delta time for this frame: <paramref name="vanilla"/>, but its game time (x <paramref name="scale"/>) at most
     /// the ticks that fit <paramref name="budget"/> at <paramref name="cost"/> each, and never less game time than x1 gets
     /// (<paramref name="vanilla"/> real seconds at speed 1).
     /// </summary>
-    internal static double Cap(double proposed, double vanilla, double scale, double cost, double budget, double interval)
+    internal static double Cap(double vanilla, double scale, double cost, double budget, double interval)
     {
-        if (!(scale > 1) || !(cost > 0)) return proposed;
+        if (!(scale > 1) || !(cost > 0)) return vanilla;
         double game = Math.Max(vanilla, budget / cost * interval);
-        return Math.Min(proposed, game / scale);
+        return Math.Min(vanilla, game / scale);
     }
 }

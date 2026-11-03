@@ -35,8 +35,6 @@ internal static class Patcher
         .. SmoothedActiveSet.Patches,
         .. AtlasRangeUpload.Patches,
         .. ParallelIdleParking.Patches,
-        .. CullCadence.Patches,
-        .. RaycastScratch.Patches,
         .. BeamTargetMemo.Patches,
         .. BeamParallel.Patches,
         .. BeamFrozen.Patches,
@@ -61,7 +59,6 @@ internal static class Patcher
         .. ZoomSubscribers.Patches,
         .. DestroyingBodySubscribers.Patches,
         .. ConstructionFloodSkip.Patches,
-        .. SpCatchUp.Patches,
         .. TickBudget.Patches,
         .. FastParallelStats.Patches,
         (PlayerMoney.Target, typeof(PlayerMoney)),
@@ -108,8 +105,6 @@ internal static class Patcher
             if (AtlasRangeUpload.Requested) _ = AtlasRangeUpload.Initialize();
             FastParallelStats.ApplyThreads();
             if (ParallelIdleParking.Requested) _ = ParallelIdleParking.Initialize();
-            if (CullCadence.Requested) _ = CullCadence.Initialize();
-            if (RaycastScratch.Requested) _ = RaycastScratch.Initialize();
             if (BeamTargetMemo.Requested) _ = BeamTargetMemo.Initialize();
             if (BeamParallel.Requested) _ = BeamParallel.Initialize();
             if (BeamFrozen.Requested) _ = BeamFrozen.Initialize();
@@ -143,8 +138,6 @@ internal static class Patcher
         BeamParallel.Disable();
         BeamFrozen.Disable();
         BeamOwnBodySkip.Disable();
-        RaycastScratch.Disable();
-        CullCadence.Disable();
         ParallelIdleParking.Disable();
         AtlasRangeUpload.Disable();
         GlowQuantize.Disable();
