@@ -207,6 +207,8 @@ public class ParallelIdleParkingTests
             FastParallel.For(0, 32, (start, end, _) =>
             {
                 if (Environment.CurrentManagedThreadId != mainThread) Interlocked.Increment(ref workerPublished);
+                // A woken worker may lose the race to the main thread draining every batch under CPU load; hold main until one takes a batch.
+                else Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref workerPublished) > 0, 10_000));
                 for (int i = start; i < end; i++)
                     FastParallel.For(0, 17, (first, last, _) => Interlocked.Add(ref nested, last - first), batchSize: 1);
             }, batchSize: 1);
